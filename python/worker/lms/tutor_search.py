@@ -26,14 +26,21 @@ def search_tutor(driver, tutor_name: str) -> None:
     """강사검색 입력창에 강사 이름 입력 후 검색."""
     emit_log(f"강사 검색: {tutor_name}")
 
+    # 로그인 폼과 마찬가지로 '강사검색'이 라벨 텍스트가 아니라 입력창의 placeholder
+    # 속성일 가능성이 높아 그것부터 시도하고, 안 되면 라벨 텍스트 뒤의 input으로 대체 시도.
     try:
-        search_input = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located(
-                (By.XPATH, f"//*[contains(normalize-space(text()), '{SEARCH_LABEL_TEXT}')]/following::input[1]")
-            )
+        search_input = WebDriverWait(driver, 5).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, f"input[placeholder='{SEARCH_LABEL_TEXT}']"))
         )
-    except TimeoutException as exc:
-        raise TutorNotFoundError(f"'{SEARCH_LABEL_TEXT}' 입력창을 찾지 못했습니다.") from exc
+    except TimeoutException:
+        try:
+            search_input = WebDriverWait(driver, 5).until(
+                EC.presence_of_element_located(
+                    (By.XPATH, f"//*[contains(normalize-space(text()), '{SEARCH_LABEL_TEXT}')]/following::input[1]")
+                )
+            )
+        except TimeoutException as exc:
+            raise TutorNotFoundError(f"'{SEARCH_LABEL_TEXT}' 입력창을 찾지 못했습니다.") from exc
 
     search_input.clear()
     search_input.send_keys(tutor_name)
