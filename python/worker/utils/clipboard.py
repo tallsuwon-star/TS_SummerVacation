@@ -7,6 +7,10 @@ import pyperclip
 
 
 def main() -> None:
+    # Windows 콘솔 기본 인코딩(cp949 등)으로 한글 요약 텍스트가 깨지는 것을 방지.
+    if hasattr(sys.stdin, "reconfigure"):
+        sys.stdin.reconfigure(encoding="utf-8")
+
     text = sys.stdin.read()
     pyperclip.copy(text)
 

@@ -2,6 +2,12 @@ import argparse
 import json
 import sys
 
+# Windows에서 콘솔 기본 인코딩(cp949 등)으로 인해 한글 로그가 깨지는 것을 방지.
+# Electron이 이 프로세스의 stdout/stdin을 UTF-8로 읽으므로 여기서도 반드시 UTF-8로 맞춰야 한다.
+for _stream in (sys.stdin, sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8")
+
 from .control import ControlState
 from .jobs import login_test, morning_special_stats, tutor_search_test
 from .utils.progress import emit_log

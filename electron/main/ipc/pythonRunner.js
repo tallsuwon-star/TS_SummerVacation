@@ -5,6 +5,11 @@ const readline = require('readline');
 const PYTHON_BIN = process.platform === 'win32' ? 'python' : 'python3';
 const PYTHON_DIR = path.join(__dirname, '..', '..', '..', 'python');
 
+// Windows에서 Python이 콘솔 기본 인코딩(cp949 등)으로 stdout/stdin을 열어 한글 로그가
+// 깨지는(mojibake) 것을 막기 위해 UTF-8을 강제한다. worker/main.py에서도 동일하게 처리하지만,
+// 여기서도 걸어두면 인터프리터 시작 시점부터 확실히 UTF-8로 열린다.
+const PYTHON_ENV = { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' };
+
 // worker 패키지 내부에서 상대 임포트(from .. import config 등)를 쓰기 때문에
 // 반드시 `-m worker.main` 형태로, cwd를 python/ 로 두고 모듈로 실행해야 한다.
 const WORKER_MODULE = 'worker.main';
@@ -22,6 +27,7 @@ function start(payload, mainWindow) {
     const child = spawn(PYTHON_BIN, args, {
       cwd: PYTHON_DIR,
       stdio: ['pipe', 'pipe', 'pipe'],
+      env: PYTHON_ENV,
     });
     currentProcess = child;
 
