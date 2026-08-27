@@ -3,13 +3,14 @@ import json
 import sys
 
 from .control import ControlState
-from .jobs import login_test, morning_special_stats
+from .jobs import login_test, morning_special_stats, tutor_search_test
 from .utils.progress import emit_log
 
 # 신규 작업(job) 추가 시 여기에 jobId -> run 함수를 등록한다.
 JOBS = {
     "morning_special_stats": morning_special_stats.run,
     "login_test": login_test.run,
+    "tutor_search_test": tutor_search_test.run,
 }
 
 

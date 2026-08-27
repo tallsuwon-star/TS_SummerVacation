@@ -1,7 +1,17 @@
 import time
 
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
+
 from .. import config
 from ..utils.progress import emit_log
+
+# 필터 바의 '강사검색' 라벨 바로 다음에 오는 입력창을 찾는다 (실제 id/class 미확인 상태).
+SEARCH_LABEL_TEXT = "강사검색"
+FIND_BUTTON_TEXT = "Find"
 
 
 class TutorNotFoundError(Exception):
@@ -13,32 +23,57 @@ class SchButtonNotFoundError(Exception):
 
 
 def search_tutor(driver, tutor_name: str) -> None:
-    """강사검색 입력창에 강사 이름 입력."""
+    """강사검색 입력창에 강사 이름 입력 후 검색."""
     emit_log(f"강사 검색: {tutor_name}")
 
-    # TODO: 강사검색 입력창 선택자 확정 필요
-    # search_input = driver.find_element(By.CSS_SELECTOR, "TODO")
-    # search_input.clear()
-    # search_input.send_keys(tutor_name)
-    # search_input.send_keys(Keys.ENTER)
+    try:
+        search_input = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located(
+                (By.XPATH, f"//*[contains(normalize-space(text()), '{SEARCH_LABEL_TEXT}')]/following::input[1]")
+            )
+        )
+    except TimeoutException as exc:
+        raise TutorNotFoundError(f"'{SEARCH_LABEL_TEXT}' 입력창을 찾지 못했습니다.") from exc
+
+    search_input.clear()
+    search_input.send_keys(tutor_name)
+
+    try:
+        find_btn = driver.find_element(
+            By.XPATH, f"//button[normalize-space(text())='{FIND_BUTTON_TEXT}'] | //input[@value='{FIND_BUTTON_TEXT}']"
+        )
+        find_btn.click()
+    except NoSuchElementException:
+        # 'Find' 버튼 선택자를 못 찾으면 입력창에서 Enter로 대체 시도
+        search_input.send_keys(Keys.ENTER)
 
     time.sleep(config.REQUEST_DELAY_SECONDS)
-
-    # TODO: 검색 결과가 없을 때 TutorNotFoundError를 발생시켜야 한다.
-    # if _no_search_results(driver):
-    #     raise TutorNotFoundError(tutor_name)
 
 
 def click_sch_button(driver, tutor_name: str) -> None:
-    """검색된 강사의 SCH 버튼 클릭."""
+    """검색된 강사의 SCH 버튼 클릭.
+
+    시간표 화면은 강사 카드 배경색이 흰색/초록색 등으로 번갈아 나오는데, 색상과 무관하게
+    강사 이름과 '같은 카드(컨테이너)' 안에 있는 SCH 버튼만 클릭해야 다른 강사의 SCH를
+    잘못 누르지 않는다. 그래서 이름 요소의 가장 가까운 조상 중 SCH 텍스트를 포함하는
+    조상을 찾아 그 안에서만 SCH를 찾는다.
+    """
     emit_log(f"{tutor_name} SCH 버튼 클릭")
 
-    # TODO: 강사 행(row) 내에서 SCH 버튼 선택자 확정 필요
-    # sch_btn = driver.find_element(By.CSS_SELECTOR, "TODO")
-    # sch_btn.click()
+    try:
+        name_el = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, f"//*[normalize-space(text())='{tutor_name}']"))
+        )
+    except TimeoutException as exc:
+        raise TutorNotFoundError(f"검색 결과에서 '{tutor_name}'을(를) 찾지 못했습니다.") from exc
 
+    try:
+        sch_btn = name_el.find_element(
+            By.XPATH,
+            "./ancestor::*[.//*[normalize-space(text())='SCH']][1]//*[normalize-space(text())='SCH']",
+        )
+    except NoSuchElementException as exc:
+        raise SchButtonNotFoundError(f"{tutor_name}의 SCH 버튼을 찾지 못했습니다.") from exc
+
+    sch_btn.click()
     time.sleep(config.REQUEST_DELAY_SECONDS)
-
-    # TODO: SCH 버튼이 없을 때 SchButtonNotFoundError를 발생시켜야 한다.
-    # if _sch_button_missing(driver):
-    #     raise SchButtonNotFoundError(tutor_name)

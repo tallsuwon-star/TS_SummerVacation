@@ -9,6 +9,16 @@ function renderMorningSpecialStatsView(container) {
       </div>
     </section>
 
+    <section class="panel">
+      <div class="field-label login-test-label">강사검색 + SCH 클릭 테스트 (로그인 → 시간표관리 → 검색 → SCH)</div>
+      <div class="inline-row">
+        <input type="text" id="tutor-search-test-name" placeholder="강사 이름 (예: Daheetest)" value="Daheetest" />
+        <button id="tutor-search-test-btn" class="btn btn-primary">여기까지 테스트</button>
+        <button id="tutor-search-test-stop-btn" class="btn btn-danger" disabled>중단</button>
+        <span id="tutor-search-test-status" class="status-badge status-pending">대기중</span>
+      </div>
+    </section>
+
     <div class="view-header">
       <h1>오전특강 통계</h1>
       <div class="job-controls">
@@ -60,6 +70,11 @@ function renderMorningSpecialStatsView(container) {
   const loginTestStopBtn = document.getElementById('login-test-stop-btn');
   const loginTestStatus = document.getElementById('login-test-status');
 
+  const tutorSearchTestNameEl = document.getElementById('tutor-search-test-name');
+  const tutorSearchTestBtn = document.getElementById('tutor-search-test-btn');
+  const tutorSearchTestStopBtn = document.getElementById('tutor-search-test-stop-btn');
+  const tutorSearchTestStatus = document.getElementById('tutor-search-test-status');
+
   const startBtn = document.getElementById('start-btn');
   const pauseBtn = document.getElementById('pause-btn');
   const stopBtn = document.getElementById('stop-btn');
@@ -74,14 +89,25 @@ function renderMorningSpecialStatsView(container) {
     tutorListEl.value = settings.lastTutorList || '';
   });
 
-  // 로그인 테스트와 오전특강 통계 작업은 python worker 프로세스를 하나만 쓰므로
+  // 이 화면의 테스트 버튼들과 오전특강 통계 작업은 python worker 프로세스를 하나만 쓰므로
   // 동시에 실행할 수 없다. 지금 실행 중인 작업이 어느 쪽인지 추적해서 완료 시 해당 UI만 되돌린다.
-  let activeJob = null; // 'login_test' | 'morning_special_stats' | null
+  let activeJob = null; // 'login_test' | 'tutor_search_test' | 'morning_special_stats' | null
   let paused = false;
+
+  function setStartButtonsDisabled(disabled) {
+    startBtn.disabled = disabled;
+    loginTestBtn.disabled = disabled;
+    tutorSearchTestBtn.disabled = disabled;
+  }
 
   function setLoginTestStatus(label, statusClass) {
     loginTestStatus.textContent = label;
     loginTestStatus.className = `status-badge status-${statusClass}`;
+  }
+
+  function setTutorSearchTestStatus(label, statusClass) {
+    tutorSearchTestStatus.textContent = label;
+    tutorSearchTestStatus.className = `status-badge status-${statusClass}`;
   }
 
   loginTestBtn.addEventListener('click', async () => {
@@ -93,14 +119,37 @@ function renderMorningSpecialStatsView(container) {
 
     activeJob = 'login_test';
     setLoginTestStatus('로그인 시도 중', 'processing');
-    loginTestBtn.disabled = true;
+    setStartButtonsDisabled(true);
     loginTestStopBtn.disabled = false;
-    startBtn.disabled = true;
   });
 
   loginTestStopBtn.addEventListener('click', async () => {
     await window.api.stopJob();
     loginTestStopBtn.disabled = true;
+  });
+
+  tutorSearchTestBtn.addEventListener('click', async () => {
+    const tutorName = tutorSearchTestNameEl.value.trim();
+    if (!tutorName) {
+      alert('강사 이름을 입력해주세요.');
+      return;
+    }
+
+    const result = await window.api.startJob({ jobId: 'tutor_search_test', tutorName });
+    if (!result.started) {
+      alert('이미 실행 중인 작업이 있습니다.');
+      return;
+    }
+
+    activeJob = 'tutor_search_test';
+    setTutorSearchTestStatus('진행 중', 'processing');
+    setStartButtonsDisabled(true);
+    tutorSearchTestStopBtn.disabled = false;
+  });
+
+  tutorSearchTestStopBtn.addEventListener('click', async () => {
+    await window.api.stopJob();
+    tutorSearchTestStopBtn.disabled = true;
   });
 
   startBtn.addEventListener('click', async () => {
@@ -137,11 +186,10 @@ function renderMorningSpecialStatsView(container) {
     }
 
     activeJob = 'morning_special_stats';
-    startBtn.disabled = true;
+    setStartButtonsDisabled(true);
     pauseBtn.disabled = false;
     stopBtn.disabled = false;
     copyBtn.disabled = true;
-    loginTestBtn.disabled = true;
   });
 
   pauseBtn.addEventListener('click', async () => {
@@ -187,20 +235,24 @@ function renderMorningSpecialStatsView(container) {
     appendLog('info', `작업 프로세스 종료 (종료 코드: ${data.code})`);
 
     if (activeJob === 'login_test') {
-      if (data.code === 0) {
-        setLoginTestStatus('완료 (브라우저 창 확인)', 'success');
-      } else {
-        setLoginTestStatus('실패 (로그 확인)', 'failed');
-      }
+      setLoginTestStatus(
+        data.code === 0 ? '완료 (브라우저 창 확인)' : '실패 (로그 확인)',
+        data.code === 0 ? 'success' : 'failed'
+      );
       loginTestStopBtn.disabled = true;
+    } else if (activeJob === 'tutor_search_test') {
+      setTutorSearchTestStatus(
+        data.code === 0 ? '완료 (브라우저 창 확인)' : '실패 (로그 확인)',
+        data.code === 0 ? 'success' : 'failed'
+      );
+      tutorSearchTestStopBtn.disabled = true;
     } else if (activeJob === 'morning_special_stats') {
       pauseBtn.disabled = true;
       stopBtn.disabled = true;
       copyBtn.disabled = false;
     }
 
-    startBtn.disabled = false;
-    loginTestBtn.disabled = false;
+    setStartButtonsDisabled(false);
     activeJob = null;
   });
 }
