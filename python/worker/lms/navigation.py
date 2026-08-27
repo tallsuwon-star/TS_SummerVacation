@@ -7,6 +7,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 from .. import config
 from ..utils.progress import emit_log
+from .driver import switch_to_new_window
 
 # 실제 확인된 선택자:
 # <a href="javascript:void(0)" class="mws-i-24 i-clock">시간표관리</a>
@@ -50,12 +51,10 @@ def go_to_native_tutor_schedule(driver) -> None:
     native_tutor_submenu.click()
 
     try:
-        WebDriverWait(driver, 10).until(lambda d: len(d.window_handles) > len(windows_before))
+        switch_to_new_window(driver, windows_before)
     except TimeoutException as exc:
         raise NavigationError("'원어민 강사 시간표' 새 탭이 열리지 않았습니다.") from exc
 
-    new_window = [w for w in driver.window_handles if w not in windows_before][0]
-    driver.switch_to.window(new_window)
     emit_log("원어민 강사 시간표 새 탭으로 전환 완료")
 
     time.sleep(config.REQUEST_DELAY_SECONDS)

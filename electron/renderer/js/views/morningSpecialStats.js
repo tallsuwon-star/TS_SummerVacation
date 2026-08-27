@@ -10,7 +10,7 @@ function renderMorningSpecialStatsView(container) {
     </section>
 
     <section class="panel">
-      <div class="field-label login-test-label">강사검색 + SCH 클릭 테스트 (로그인 → 시간표관리 → 검색 → SCH)</div>
+      <div class="field-label login-test-label">강사검색 + 회원 수집 테스트 (로그인 → 시간표관리 → 검색 → SCH → 오전 전환 → 회원 명단)</div>
       <div class="inline-row">
         <input type="text" id="tutor-search-test-name" placeholder="강사 이름 (예: Daheetest)" value="Daheetest" />
         <button id="tutor-search-test-btn" class="btn btn-primary">여기까지 테스트</button>

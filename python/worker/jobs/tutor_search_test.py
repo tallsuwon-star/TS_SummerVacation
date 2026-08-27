@@ -4,6 +4,7 @@ from ..control import ControlState
 from ..lms.auth import login
 from ..lms.driver import build_driver
 from ..lms.navigation import go_to_native_tutor_schedule
+from ..lms.schedule import collect_am_class_members, ensure_am_view
 from ..lms.tutor_search import click_sch_button, search_tutor
 from ..utils.progress import emit_done, emit_log
 
@@ -11,8 +12,8 @@ JOB_NAME = "tutor_search_test"
 
 
 def run(job_payload: dict, control: ControlState) -> None:
-    """로그인 -> 시간표관리 이동 -> 강사검색 -> SCH 클릭까지만 확인하는 테스트 작업.
-    성공하면 브라우저를 열어둔 채 '중단'을 누를 때까지 대기한다.
+    """로그인 -> 시간표관리 이동 -> 강사검색 -> SCH 클릭 -> 오전 전환 -> 회원 명단 수집까지
+    확인하는 테스트 작업. 성공하면 브라우저를 열어둔 채 '중단'을 누를 때까지 대기한다.
     """
     tutor_name = (job_payload.get("tutorName") or "").strip()
     if not tutor_name:
@@ -27,8 +28,12 @@ def run(job_payload: dict, control: ControlState) -> None:
         go_to_native_tutor_schedule(driver)
         search_tutor(driver, tutor_name)
         click_sch_button(driver, tutor_name)
+        ensure_am_view(driver)
 
-        emit_log(f"'{tutor_name}' 검색 -> SCH 클릭까지 완료. 브라우저 창을 직접 확인해주세요.")
+        member_names = collect_am_class_members(driver)
+        emit_log(f"오전(10:00~12:30 시작) 회원 명단 ({len(member_names)}명): {member_names}")
+
+        emit_log(f"'{tutor_name}' 회원 명단 수집까지 완료. 브라우저 창을 직접 확인해주세요.")
         emit_log("'중단' 버튼을 누르기 전까지 브라우저가 열린 상태로 유지됩니다.")
 
         while not control.should_stop():

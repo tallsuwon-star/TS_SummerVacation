@@ -85,6 +85,7 @@ def _process_tutor(
 ) -> None:
     search_tutor(driver, tutor_name)
     click_sch_button(driver, tutor_name)
+    schedule_window = driver.current_window_handle
     ensure_am_view(driver)
 
     member_names = collect_am_class_members(driver)
@@ -104,7 +105,7 @@ def _process_tutor(
             }
         )
 
-        close_member_popup(driver)
+        close_member_popup(driver, schedule_window)
 
 
 def _fail(failures: list[dict], tutor_name: str, reason: str) -> None:

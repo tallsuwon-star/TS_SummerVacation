@@ -8,6 +8,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 from .. import config
 from ..utils.progress import emit_log
+from .driver import switch_to_new_window
 
 # 필터 바의 '강사검색' 라벨 바로 다음에 오는 입력창을 찾는다 (실제 id/class 미확인 상태).
 SEARCH_LABEL_TEXT = "강사검색"
@@ -64,6 +65,9 @@ def click_sch_button(driver, tutor_name: str) -> None:
     강사 이름과 '같은 카드(컨테이너)' 안에 있는 SCH 버튼만 클릭해야 다른 강사의 SCH를
     잘못 누르지 않는다. 그래서 이름 요소의 가장 가까운 조상 중 SCH 텍스트를 포함하는
     조상을 찾아 그 안에서만 SCH를 찾는다.
+
+    SCH 버튼은 chk_schedule()이 window.open()으로 새 팝업 창을 여는 방식이라,
+    클릭 후 그 새 창으로 전환해야 이후 오전/오후 조작이 된다.
     """
     emit_log(f"{tutor_name} SCH 버튼 클릭")
 
@@ -82,5 +86,12 @@ def click_sch_button(driver, tutor_name: str) -> None:
     except NoSuchElementException as exc:
         raise SchButtonNotFoundError(f"{tutor_name}의 SCH 버튼을 찾지 못했습니다.") from exc
 
+    windows_before = driver.window_handles
     sch_btn.click()
+
+    try:
+        switch_to_new_window(driver, windows_before)
+    except TimeoutException as exc:
+        raise SchButtonNotFoundError(f"{tutor_name}의 시간표 팝업이 열리지 않았습니다.") from exc
+
     time.sleep(config.REQUEST_DELAY_SECONDS)
