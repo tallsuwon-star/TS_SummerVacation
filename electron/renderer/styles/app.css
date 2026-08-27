@@ -168,6 +168,16 @@ html, body {
   color: var(--text-muted);
 }
 
+.login-test-label {
+  margin-bottom: 10px;
+}
+
+.inline-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 textarea, input[type="date"], input[type="text"] {
   background: var(--surface-alt);
   border: 1px solid var(--border);
