@@ -1,0 +1,5 @@
+selenium>=4.6
+gspread>=6.0
+google-auth>=2.29
+python-dotenv>=1.0
+pyperclip>=1.8

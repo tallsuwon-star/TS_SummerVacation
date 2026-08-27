@@ -1,0 +1,17 @@
+{
+  "name": "lms-tutoring-credit-automation",
+  "version": "0.1.0",
+  "description": "LMS 관리자 페이지를 순회하며 강사별 보강권 지급 현황을 구글 시트에 자동 기록하는 사내 자동화 도구",
+  "main": "electron/main/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron ."
+  },
+  "license": "UNLICENSED",
+  "dependencies": {
+    "electron-store": "^8.2.0"
+  },
+  "devDependencies": {
+    "electron": "^30.0.9"
+  }
+}
