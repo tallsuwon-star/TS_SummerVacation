@@ -178,6 +178,28 @@ html, body {
   gap: 10px;
 }
 
+.log-output {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px;
+  max-height: 220px;
+  overflow-y: auto;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 12px;
+}
+
+.log-line {
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 2px 0;
+  color: var(--text-muted);
+}
+
+.log-line-error {
+  color: var(--danger);
+}
+
 textarea, input[type="date"], input[type="text"] {
   background: var(--surface-alt);
   border: 1px solid var(--border);

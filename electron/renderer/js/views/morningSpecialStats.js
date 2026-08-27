@@ -38,9 +38,23 @@ function renderMorningSpecialStatsView(container) {
     <section class="panel">
       <div id="dashboard-container"></div>
     </section>
+
+    <section class="panel">
+      <div class="field-label login-test-label">실행 로그</div>
+      <div id="log-output" class="log-output"></div>
+    </section>
   `;
 
   const dashboard = window.createDashboard(document.getElementById('dashboard-container'));
+  const logOutput = document.getElementById('log-output');
+
+  function appendLog(level, message) {
+    const line = document.createElement('div');
+    line.className = `log-line log-line-${level}`;
+    line.textContent = message;
+    logOutput.appendChild(line);
+    logOutput.scrollTop = logOutput.scrollHeight;
+  }
 
   const loginTestBtn = document.getElementById('login-test-btn');
   const loginTestStopBtn = document.getElementById('login-test-stop-btn');
@@ -162,13 +176,22 @@ function renderMorningSpecialStatsView(container) {
   });
 
   window.api.onJobLog((data) => {
-    // TODO: 로그 패널 UI가 추가되면 여기서 화면에 출력
-    console.log('[job:log]', data);
+    appendLog(data.level || 'info', data.message || '');
   });
 
-  window.api.onJobDone(() => {
+  window.api.onJobDone((data) => {
+    // python worker의 emit_done(요약 정보, code 없음)과 프로세스 종료(code 있음) 두 번 올 수 있다.
+    // 실제 성공/실패는 code가 담긴 이벤트가 최종 판단 기준이다.
+    if (typeof data.code === 'undefined') return;
+
+    appendLog('info', `작업 프로세스 종료 (종료 코드: ${data.code})`);
+
     if (activeJob === 'login_test') {
-      setLoginTestStatus('완료 (브라우저 창 확인)', 'success');
+      if (data.code === 0) {
+        setLoginTestStatus('완료 (브라우저 창 확인)', 'success');
+      } else {
+        setLoginTestStatus('실패 (로그 확인)', 'failed');
+      }
       loginTestStopBtn.disabled = true;
     } else if (activeJob === 'morning_special_stats') {
       pauseBtn.disabled = true;

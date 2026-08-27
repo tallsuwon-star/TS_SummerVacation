@@ -19,15 +19,28 @@ function start(payload, mainWindow) {
     }
 
     const args = ['-m', WORKER_MODULE, '--job', payload.jobId];
-    currentProcess = spawn(PYTHON_BIN, args, {
+    const child = spawn(PYTHON_BIN, args, {
       cwd: PYTHON_DIR,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
+    currentProcess = child;
+
+    // spawn 자체가 실패하면(예: PYTHON_BIN을 찾을 수 없음) 'error' 이벤트가 발생한다.
+    // 리스너가 없으면 Node가 처리되지 않은 예외로 던져서 Electron 프로세스 전체가 죽으므로 반드시 처리해야 한다.
+    child.on('error', (err) => {
+      mainWindow?.webContents.send('job:log', {
+        type: 'log',
+        level: 'error',
+        message: `Python 프로세스를 실행할 수 없습니다 ("${PYTHON_BIN}" 명령을 찾을 수 없거나 실행 권한이 없습니다): ${err.message}`,
+      });
+      mainWindow?.webContents.send('job:done', { type: 'done', code: -1 });
+      if (currentProcess === child) currentProcess = null;
+    });
 
     // 첫 줄로 작업 설정(JSON)을 전달, 이후 stdin은 pause/resume/stop 제어용
-    currentProcess.stdin.write(`${JSON.stringify(payload)}\n`);
+    child.stdin.write(`${JSON.stringify(payload)}\n`);
 
-    const rl = readline.createInterface({ input: currentProcess.stdout });
+    const rl = readline.createInterface({ input: child.stdout });
     rl.on('line', (line) => {
       if (!line.trim()) return;
       try {
@@ -44,13 +57,13 @@ function start(payload, mainWindow) {
       }
     });
 
-    currentProcess.stderr.on('data', (chunk) => {
+    child.stderr.on('data', (chunk) => {
       mainWindow?.webContents.send('job:log', { type: 'log', level: 'error', message: chunk.toString() });
     });
 
-    currentProcess.on('close', (code) => {
+    child.on('close', (code) => {
       mainWindow?.webContents.send('job:done', { type: 'done', code });
-      currentProcess = null;
+      if (currentProcess === child) currentProcess = null;
     });
 
     resolve({ started: true });
