@@ -10,7 +10,7 @@ function renderMorningSpecialStatsView(container) {
     </section>
 
     <section class="panel">
-      <div class="field-label login-test-label">강사검색 + 회원 수집 테스트 (로그인 → 시간표관리 → 검색 → SCH → 오전 전환 → 회원 명단)</div>
+      <div class="field-label login-test-label">강사검색 + 보강권 확인 테스트 (로그인 → 시간표관리 → 검색 → SCH → 오전 전환 → 회원 명단 → 회원별 상담관리 보강권 건수, 위 기준일 사용)</div>
       <div class="inline-row">
         <input type="text" id="tutor-search-test-name" placeholder="강사 이름 (예: Daheetest)" value="Daheetest" />
         <button id="tutor-search-test-btn" class="btn btn-primary">여기까지 테스트</button>
@@ -187,11 +187,19 @@ function renderMorningSpecialStatsView(container) {
       return;
     }
 
-    const result = await window.api.startJob({ jobId: 'tutor_search_test', tutorName });
+    const result = await window.api.startJob({
+      jobId: 'tutor_search_test',
+      tutorName,
+      consultationAfter: consultationInput.value,
+      classAfter: classInput.value,
+    });
     if (!result.started) {
       alert('이미 실행 중인 작업이 있습니다.');
       return;
     }
+
+    collectedRecords = [];
+    renderRecordsTable();
 
     activeJob = 'tutor_search_test';
     setTutorSearchTestStatus('진행 중', 'processing');
