@@ -13,7 +13,6 @@ from ..utils.progress import emit_log
 from .schedule import AM_WINDOW_END_MINUTES, AM_WINDOW_START_MINUTES
 
 PAGE_COUNT_SELECT_SELECTOR = "select[name='page_count']"
-MAX_PAGE_COUNT_VALUE = "120"
 
 VALID_AUTHORS = {"이성규", "양수아"}
 
@@ -156,19 +155,34 @@ def count_makeup_credits(
 
 def _ensure_max_page_size(driver) -> None:
     """목록이 30개씩 페이지네이션되어 있어 최근 등록분이 뒤 페이지로 밀릴 수 있으므로,
-    'Show' 드롭다운을 최대값(120)으로 올려서 한 페이지에서 최대한 많이 확인한다.
-    (완전한 페이지네이션 순회는 아니지만, 대상 기간이 보통 최근 1~2주 내인 점을 감안하면
-    대부분의 경우 이걸로 충분하다.)
+    'Show' 드롭다운을 각 목록에서 고를 수 있는 가장 큰 값으로 올려서 한 페이지에서 최대한
+    많이 확인한다. (완전한 페이지네이션 순회는 아니지만, 대상 기간이 보통 최근 1~2주 내인
+    점을 감안하면 대부분의 경우 이걸로 충분하다.)
+
+    이 페이지에는 '정규 수강상담 리스트'와 '상담 내용 작성' 두 목록이 각자 자신의
+    page_count 드롭다운을 갖고 있을 수 있어 select[name='page_count']가 여러 개 잡힐 수
+    있다. 옵션 값을 120으로 하드코딩하면 그 값이 없는 드롭다운에서 예외가 나서 작업
+    전체가 죽으므로, 각 드롭다운에서 실제로 제공하는 옵션 중 가장 큰 값을 골라 선택하고,
+    이건 어디까지나 부가 기능이라 하나라도 실패해도(드롭다운이 없거나, 클릭 후 페이지가
+    새로고침되어 다음 드롭다운 참조가 stale해지는 경우 등) 작업 자체는 계속 진행한다.
     """
     try:
-        select_el = driver.find_element(By.CSS_SELECTOR, PAGE_COUNT_SELECT_SELECTOR)
-    except NoSuchElementException:
+        select_elements = driver.find_elements(By.CSS_SELECTOR, PAGE_COUNT_SELECT_SELECTOR)
+    except Exception:  # noqa: BLE001 - 부가 기능, 실패해도 작업을 막으면 안 됨
         return
 
-    select = Select(select_el)
-    if select.first_selected_option.get_attribute("value") != MAX_PAGE_COUNT_VALUE:
-        select.select_by_value(MAX_PAGE_COUNT_VALUE)
-        time_module.sleep(config.REQUEST_DELAY_SECONDS)
+    for select_el in select_elements:
+        try:
+            select = Select(select_el)
+            options = select.options
+            if not options:
+                continue
+            largest_value = options[-1].get_attribute("value")
+            if select.first_selected_option.get_attribute("value") != largest_value:
+                select.select_by_value(largest_value)
+                time_module.sleep(config.REQUEST_DELAY_SECONDS)
+        except Exception as exc:  # noqa: BLE001 - 부가 기능, 실패해도 작업 자체는 계속 진행
+            emit_log(f"상담 목록 페이지 크기 확장 중 일부 실패 (무시하고 계속 진행): {exc}", level="error")
 
 
 def _parse_date(text: str) -> date | None:
