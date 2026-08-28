@@ -9,7 +9,7 @@ SCOPES = [
 ]
 
 
-def get_worksheet(worksheet_name: str = "Sheet1"):
+def get_worksheet(worksheet_name: str = "시트1"):
     """서비스 계정 인증으로 구글 시트를 연다.
     GOOGLE_SHEETS_CREDENTIALS_PATH / GOOGLE_SHEET_ID 는 .env에서 로드된다.
     """
@@ -19,7 +19,6 @@ def get_worksheet(worksheet_name: str = "Sheet1"):
     client = gspread.authorize(creds)
     sheet = client.open_by_key(config.GOOGLE_SHEET_ID)
 
-    # TODO: 실제 워크시트(탭) 이름/구조가 확정되면 조정
     return sheet.worksheet(worksheet_name)
 
 
