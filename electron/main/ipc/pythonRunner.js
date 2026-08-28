@@ -53,6 +53,8 @@ function start(payload, mainWindow) {
         const data = JSON.parse(line);
         if (data.type === 'progress') {
           mainWindow?.webContents.send('job:progress', data);
+        } else if (data.type === 'record') {
+          mainWindow?.webContents.send('job:record', data);
         } else if (data.type === 'done') {
           mainWindow?.webContents.send('job:done', data);
         } else {

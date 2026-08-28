@@ -14,6 +14,20 @@ from .driver import switch_to_new_window
 SEARCH_LABEL_TEXT = "강사검색"
 FIND_BUTTON_TEXT = "Find"
 
+_UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+_LOWER = "abcdefghijklmnopqrstuvwxyz"
+
+
+def _case_insensitive_text_equals_xpath(value: str) -> str:
+    """XPath 1.0에는 대소문자 무시 비교 함수가 없어 translate()로 흉내낸다.
+    강사 이름을 'alfred'처럼 소문자로 입력해도 화면의 'Alfred'와 매칭되도록 하기 위함.
+    """
+    escaped = value.replace("'", "")
+    return (
+        f"translate(normalize-space(text()), '{_UPPER}', '{_LOWER}') = "
+        f"translate('{escaped}', '{_UPPER}', '{_LOWER}')"
+    )
+
 
 class TutorNotFoundError(Exception):
     pass
@@ -73,7 +87,7 @@ def click_sch_button(driver, tutor_name: str) -> None:
 
     try:
         name_el = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.XPATH, f"//*[normalize-space(text())='{tutor_name}']"))
+            EC.presence_of_element_located((By.XPATH, f"//*[{_case_insensitive_text_equals_xpath(tutor_name)}]"))
         )
     except TimeoutException as exc:
         raise TutorNotFoundError(f"검색 결과에서 '{tutor_name}'을(를) 찾지 못했습니다.") from exc

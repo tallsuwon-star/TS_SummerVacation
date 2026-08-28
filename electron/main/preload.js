@@ -26,6 +26,10 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.removeAllListeners('job:log');
     ipcRenderer.on('job:log', (_event, data) => callback(data));
   },
+  onJobRecord: (callback) => {
+    ipcRenderer.removeAllListeners('job:record');
+    ipcRenderer.on('job:record', (_event, data) => callback(data));
+  },
   onJobDone: (callback) => {
     ipcRenderer.removeAllListeners('job:done');
     ipcRenderer.on('job:done', (_event, data) => callback(data));

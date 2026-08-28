@@ -50,6 +50,18 @@ function renderMorningSpecialStatsView(container) {
     </section>
 
     <section class="panel">
+      <div class="field-label login-test-label">보강권 지급 내역 (강사 / 회원 / 건수) — 아래 복사 버튼으로 엑셀에 바로 붙여넣기 가능</div>
+      <table class="dashboard-table" id="records-table">
+        <thead>
+          <tr><th>강사명</th><th>회원명</th><th>보강권 건수</th></tr>
+        </thead>
+        <tbody id="records-table-body">
+          <tr><td colspan="3" class="empty">아직 수집된 내역이 없습니다.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="panel">
       <div class="field-label login-test-label">실행 로그</div>
       <div id="log-output" class="log-output"></div>
     </section>
@@ -57,6 +69,7 @@ function renderMorningSpecialStatsView(container) {
 
   const dashboard = window.createDashboard(document.getElementById('dashboard-container'));
   const logOutput = document.getElementById('log-output');
+  const recordsTableBody = document.getElementById('records-table-body');
 
   function appendLog(level, message) {
     const line = document.createElement('div');
@@ -64,6 +77,45 @@ function renderMorningSpecialStatsView(container) {
     line.textContent = message;
     logOutput.appendChild(line);
     logOutput.scrollTop = logOutput.scrollHeight;
+  }
+
+  // python worker가 회원 한 명 처리를 끝낼 때마다 job:record로 보내주는 (강사, 회원, 건수) 목록.
+  let collectedRecords = [];
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function renderRecordsTable() {
+    if (collectedRecords.length === 0) {
+      recordsTableBody.innerHTML = '<tr><td colspan="3" class="empty">아직 수집된 내역이 없습니다.</td></tr>';
+      return;
+    }
+
+    recordsTableBody.innerHTML = collectedRecords
+      .map(
+        (r) =>
+          `<tr><td>${escapeHtml(r.tutor)}</td><td>${escapeHtml(r.member)}</td><td>${r.creditCount}</td></tr>`
+      )
+      .join('');
+  }
+
+  function buildClipboardText() {
+    // 탭으로 구분해야 엑셀/구글시트에 붙여넣을 때 자동으로 열이 나뉜다.
+    const lines = ['강사명\t회원명\t보강권 건수'];
+    collectedRecords.forEach((r) => {
+      lines.push(`${r.tutor}\t${r.member}\t${r.creditCount}`);
+    });
+
+    const failed = dashboard.getFailedList();
+    if (failed.length > 0) {
+      lines.push('', '[실패한 강사]');
+      failed.forEach(({ tutor, reason }) => lines.push(`${tutor}\t${reason ?? '사유 미상'}`));
+    }
+
+    return lines.join('\n');
   }
 
   const loginTestBtn = document.getElementById('login-test-btn');
@@ -164,6 +216,8 @@ function renderMorningSpecialStatsView(container) {
     }
 
     dashboard.reset(tutors);
+    collectedRecords = [];
+    renderRecordsTable();
     paused = false;
     pauseBtn.textContent = '일시정지';
 
@@ -211,7 +265,7 @@ function renderMorningSpecialStatsView(container) {
   });
 
   copyBtn.addEventListener('click', async () => {
-    const text = dashboard.getSummaryText();
+    const text = buildClipboardText();
     const result = await window.api.copySummary(text);
     copyBtn.textContent = result.success ? '복사됨!' : '복사 실패';
     setTimeout(() => {
@@ -221,6 +275,11 @@ function renderMorningSpecialStatsView(container) {
 
   window.api.onJobProgress((data) => {
     dashboard.setStatus(data.tutor, data.status, data.found, data.reason);
+  });
+
+  window.api.onJobRecord((data) => {
+    collectedRecords.push({ tutor: data.tutor, member: data.member, creditCount: data.credit_count });
+    renderRecordsTable();
   });
 
   window.api.onJobLog((data) => {
