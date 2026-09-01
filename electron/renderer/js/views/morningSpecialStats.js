@@ -1,3 +1,19 @@
+// 원어민 강사 명단. 'TL '로 시작하는 이름은 직급 강사라 명단에서 아예 뺐고,
+// '(WFH)'는 재택근무 표시일 뿐 실제 강사명이 아니라서 이름만 남기고 뗐다.
+const TUTOR_ROSTER = [
+  'Sadie', 'Chen', 'Tami', 'Angelo', 'Sana', 'Sedona', 'Aida', 'Jerome', 'Fria',
+  'Tracy', 'Zarinna', 'Denver', 'Maddie', 'Veera', 'Arlene', 'Agatha', 'Athena',
+  'Alodia', 'Lander', 'Melia', 'Rhen', 'Minerva', 'Amber', 'Cassie', 'Avida',
+  'Brook', 'Abegail', 'Apple', 'Kinsley', 'Kristine', 'John', 'Tine', 'Lindsay',
+  'Lucille', 'Jojo', 'Howie', 'Lydia', 'Mayen', 'Sera', 'Destiny', 'Cyrel', 'Jem',
+  'Loki', 'Bam', 'Stella', 'Rio', 'Sophie', 'Kesiah', 'Fawn', 'Emcee', 'Pamela',
+  'Goldie', 'Calista', 'Camille', 'Pearl', 'Piper', 'Khim', 'Eco', 'Claire',
+  'Janrey', 'Joan', 'Jasper', 'Rick', 'Felin', 'Joice', 'Oscar', 'Olive', 'Wesley',
+  'Selena', 'Nicole', 'Sheila', 'Enid', 'Jena', 'Jerrica', 'Mariel', 'Michelle',
+  'Missy', 'Karen', 'Zoey', 'Fen', 'Clara', 'Kenny', 'Angie', 'Mary', 'Bea',
+  'Zelina', 'Amelie', 'Carmit', 'Pops', 'Wency', 'Cassandra', 'Veron',
+];
+
 function renderMorningSpecialStatsView(container) {
   container.innerHTML = `
     <section class="panel">
@@ -30,8 +46,18 @@ function renderMorningSpecialStatsView(container) {
     </div>
 
     <section class="panel">
-      <label class="field-label" for="tutor-list">강사 명단 (한 줄에 한 명씩 붙여넣기)</label>
-      <textarea id="tutor-list" rows="8" placeholder="김민지&#10;이영희&#10;..."></textarea>
+      <div class="field-label">강사 명단 선택</div>
+      <div class="tutor-roster-actions">
+        <button id="tutor-select-all-btn" type="button" class="btn btn-ghost">전체 선택</button>
+        <button id="tutor-deselect-all-btn" type="button" class="btn btn-ghost">전체 해제</button>
+        <span id="tutor-roster-count" class="tutor-roster-count">0명 선택됨</span>
+      </div>
+      <div id="tutor-roster-grid" class="tutor-roster-grid"></div>
+    </section>
+
+    <section class="panel">
+      <label class="field-label" for="tutor-list">직접 추가 (위 명단에 없는 강사만, 한 줄에 한 명씩)</label>
+      <textarea id="tutor-list" rows="3" placeholder="체크박스 명단에 없는 강사만 여기에 추가로 입력"></textarea>
     </section>
 
     <section class="panel criteria-panel">
@@ -135,10 +161,56 @@ function renderMorningSpecialStatsView(container) {
   const consultationInput = document.getElementById('consultation-after');
   const classInput = document.getElementById('class-after');
 
+  const tutorRosterGrid = document.getElementById('tutor-roster-grid');
+  const tutorRosterCount = document.getElementById('tutor-roster-count');
+  const tutorSelectAllBtn = document.getElementById('tutor-select-all-btn');
+  const tutorDeselectAllBtn = document.getElementById('tutor-deselect-all-btn');
+
+  tutorRosterGrid.innerHTML = TUTOR_ROSTER.map(
+    (name, idx) => `
+      <div class="tutor-checkbox">
+        <input type="checkbox" id="tutor-chk-${idx}" data-name="${escapeHtml(name)}" />
+        <label for="tutor-chk-${idx}">${escapeHtml(name)}</label>
+      </div>
+    `
+  ).join('');
+
+  function getCheckedTutorNames() {
+    return Array.from(tutorRosterGrid.querySelectorAll('input[type="checkbox"]:checked')).map(
+      (el) => el.dataset.name
+    );
+  }
+
+  function updateTutorRosterCount() {
+    tutorRosterCount.textContent = `${getCheckedTutorNames().length}명 선택됨`;
+  }
+
+  tutorRosterGrid.addEventListener('change', updateTutorRosterCount);
+
+  tutorSelectAllBtn.addEventListener('click', () => {
+    tutorRosterGrid.querySelectorAll('input[type="checkbox"]').forEach((el) => {
+      el.checked = true;
+    });
+    updateTutorRosterCount();
+  });
+
+  tutorDeselectAllBtn.addEventListener('click', () => {
+    tutorRosterGrid.querySelectorAll('input[type="checkbox"]').forEach((el) => {
+      el.checked = false;
+    });
+    updateTutorRosterCount();
+  });
+
   window.api.getSettings().then((settings) => {
     consultationInput.value = settings.criteria?.consultationAfter || '2026-08-18';
     classInput.value = settings.criteria?.classAfter || '2026-08-20';
     tutorListEl.value = settings.lastTutorList || '';
+
+    const checkedSet = new Set(settings.checkedTutors || []);
+    tutorRosterGrid.querySelectorAll('input[type="checkbox"]').forEach((el) => {
+      el.checked = checkedSet.has(el.dataset.name);
+    });
+    updateTutorRosterCount();
   });
 
   // 이 화면의 테스트 버튼들과 오전특강 통계 작업은 python worker 프로세스를 하나만 쓰므로
@@ -213,13 +285,15 @@ function renderMorningSpecialStatsView(container) {
   });
 
   startBtn.addEventListener('click', async () => {
-    const tutors = tutorListEl.value
+    const checkedNames = getCheckedTutorNames();
+    const extraNames = tutorListEl.value
       .split('\n')
       .map((name) => name.trim())
       .filter(Boolean);
+    const tutors = Array.from(new Set([...checkedNames, ...extraNames]));
 
     if (tutors.length === 0) {
-      alert('강사 명단을 입력해주세요.');
+      alert('강사를 체크박스에서 선택하거나 직접 입력해주세요.');
       return;
     }
 
@@ -238,6 +312,7 @@ function renderMorningSpecialStatsView(container) {
 
     await window.api.setSettings({
       lastTutorList: tutorListEl.value,
+      checkedTutors: checkedNames,
       criteria: { consultationAfter: payload.consultationAfter, classAfter: payload.classAfter },
     });
 
