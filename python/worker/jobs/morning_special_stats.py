@@ -85,36 +85,57 @@ def _process_tutor(
     records: list[dict],
     worksheet,
 ) -> None:
-    search_tutor(driver, tutor_name)
-    click_sch_button(driver, tutor_name)
-    schedule_window = driver.current_window_handle
-    ensure_am_view(driver)
+    # 강사 목록 탭(원어민 강사 시간표) - 다음 강사를 검색하려면 반드시 이 탭으로 돌아와 있어야 한다.
+    tutor_list_window = driver.current_window_handle
 
-    member_names = collect_am_class_members(driver)
+    try:
+        search_tutor(driver, tutor_name)
+        click_sch_button(driver, tutor_name)
+        schedule_window = driver.current_window_handle
+        ensure_am_view(driver)
 
-    for member_name in member_names:
-        open_member_popup(driver, member_name)
-        open_consultation_tab(driver)
+        member_names = collect_am_class_members(driver)
 
-        consultation_records = collect_consultation_records(driver)
-        credit_count = count_makeup_credits(consultation_records, consultation_after, class_after)
+        for member_name in member_names:
+            open_member_popup(driver, member_name)
+            open_consultation_tab(driver)
 
-        records.append(
-            {
-                "tutor": tutor_name,
-                "member": member_name,
-                "credit_count": credit_count,
-            }
-        )
-        emit_record(tutor_name, member_name, credit_count)
+            consultation_records = collect_consultation_records(driver)
+            credit_count = count_makeup_credits(consultation_records, consultation_after, class_after)
 
-        if worksheet is not None:
-            try:
-                append_credit_row(worksheet, tutor_name, member_name, credit_count)
-            except Exception as exc:  # noqa: BLE001 - 시트 기록 실패해도 나머지 처리는 계속
-                emit_log(f"구글 시트 기록 실패 ({tutor_name}/{member_name}): {exc}", level="error")
+            records.append(
+                {
+                    "tutor": tutor_name,
+                    "member": member_name,
+                    "credit_count": credit_count,
+                }
+            )
+            emit_record(tutor_name, member_name, credit_count)
 
-        close_member_popup(driver, schedule_window)
+            if worksheet is not None:
+                try:
+                    append_credit_row(worksheet, tutor_name, member_name, credit_count)
+                except Exception as exc:  # noqa: BLE001 - 시트 기록 실패해도 나머지 처리는 계속
+                    emit_log(f"구글 시트 기록 실패 ({tutor_name}/{member_name}): {exc}", level="error")
+
+            close_member_popup(driver, schedule_window)
+    finally:
+        # 이 강사 처리 중 어디서 실패하든, 열렸던 SCH/회원 팝업을 전부 닫고 반드시 강사 목록
+        # 탭으로 돌아간다. 이걸 안 하면 다음 강사 검색이 엉뚱한(이전 강사의) 팝업 화면에서
+        # 시도되어 '강사 검색 실패'가 이어서 계속 발생한다.
+        _return_to_tutor_list(driver, tutor_list_window)
+
+
+def _return_to_tutor_list(driver, tutor_list_window: str) -> None:
+    for handle in list(driver.window_handles):
+        if handle == tutor_list_window:
+            continue
+        try:
+            driver.switch_to.window(handle)
+            driver.close()
+        except Exception:  # noqa: BLE001 - 이미 닫혔거나 접근 불가한 창은 무시하고 계속 정리
+            pass
+    driver.switch_to.window(tutor_list_window)
 
 
 def _fail(failures: list[dict], tutor_name: str, reason: str) -> None:
