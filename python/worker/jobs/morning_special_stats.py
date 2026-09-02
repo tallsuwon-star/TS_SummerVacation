@@ -29,7 +29,8 @@ def run(job_payload: dict, control: ControlState) -> None:
     구글 시트는 회원 한 명 처리가 끝날 때마다 바로 한 행씩 기록한다 (중간에 중단되어도 그때까지의
     결과는 시트에 이미 남아있도록).
     """
-    tutors: list[str] = job_payload.get("tutors", [])
+    # 앞뒤 공백이 섞여 들어오면 LMS 검색창에서 그대로 매칭 실패하므로 여기서 한 번에 제거한다.
+    tutors: list[str] = [t.strip() for t in job_payload.get("tutors", []) if t.strip()]
     consultation_after = _parse_iso_date(job_payload["consultationAfter"])
     class_after = _parse_iso_date(job_payload["classAfter"])
 
