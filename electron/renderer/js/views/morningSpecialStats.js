@@ -48,6 +48,7 @@ function renderMorningSpecialStatsView(container) {
     <section class="panel">
       <div class="field-label">강사 명단 선택</div>
       <div class="tutor-roster-actions">
+        <input type="text" id="tutor-roster-search" class="roster-search-input" placeholder="강사 이름 검색..." />
         <button id="tutor-select-all-btn" type="button" class="btn btn-ghost">전체 선택</button>
         <button id="tutor-deselect-all-btn" type="button" class="btn btn-ghost">전체 해제</button>
         <span id="tutor-roster-count" class="tutor-roster-count">0명 선택됨</span>
@@ -58,6 +59,7 @@ function renderMorningSpecialStatsView(container) {
     <section class="panel">
       <label class="field-label" for="tutor-list">직접 추가 (위 명단에 없는 강사만, 한 줄에 한 명씩)</label>
       <textarea id="tutor-list" rows="3" placeholder="체크박스 명단에 없는 강사만 여기에 추가로 입력"></textarea>
+      <div class="field-hint">별도 제출 버튼 없음 — 여기 적어두면 아래 "시작" 버튼을 누를 때 체크된 강사와 함께 자동으로 반영됩니다.</div>
     </section>
 
     <section class="panel criteria-panel">
@@ -89,6 +91,10 @@ function renderMorningSpecialStatsView(container) {
 
     <section class="panel">
       <div class="field-label login-test-label">실행 로그</div>
+      <div class="log-toolbar">
+        <input type="text" id="log-search" class="roster-search-input" placeholder="로그 검색... (일치하는 줄만 표시)" />
+        <span id="log-search-count" class="tutor-roster-count"></span>
+      </div>
       <div id="log-output" class="log-output"></div>
     </section>
   `;
@@ -97,12 +103,41 @@ function renderMorningSpecialStatsView(container) {
   const logOutput = document.getElementById('log-output');
   const recordsTableBody = document.getElementById('records-table-body');
 
+  const logSearchInput = document.getElementById('log-search');
+  const logSearchCount = document.getElementById('log-search-count');
+  let logSearchQuery = '';
+
+  function applyLogLineVisibility(line) {
+    const matches = !logSearchQuery || line.textContent.toLowerCase().includes(logSearchQuery);
+    line.hidden = !matches;
+  }
+
+  function updateLogSearchCount() {
+    if (!logSearchQuery) {
+      logSearchCount.textContent = '';
+      return;
+    }
+    const total = logOutput.children.length;
+    const shown = logOutput.querySelectorAll('.log-line:not([hidden])').length;
+    logSearchCount.textContent = `${shown} / ${total}줄 일치`;
+  }
+
+  logSearchInput.addEventListener('input', () => {
+    logSearchQuery = logSearchInput.value.trim().toLowerCase();
+    Array.from(logOutput.children).forEach(applyLogLineVisibility);
+    updateLogSearchCount();
+  });
+
   function appendLog(level, message) {
     const line = document.createElement('div');
     line.className = `log-line log-line-${level}`;
     line.textContent = message;
+    applyLogLineVisibility(line);
     logOutput.appendChild(line);
-    logOutput.scrollTop = logOutput.scrollHeight;
+    if (!line.hidden) {
+      logOutput.scrollTop = logOutput.scrollHeight;
+    }
+    updateLogSearchCount();
   }
 
   // python worker가 회원 한 명 처리를 끝낼 때마다 job:record로 보내주는 (강사, 회원, 건수) 목록.
@@ -165,6 +200,7 @@ function renderMorningSpecialStatsView(container) {
   const tutorRosterCount = document.getElementById('tutor-roster-count');
   const tutorSelectAllBtn = document.getElementById('tutor-select-all-btn');
   const tutorDeselectAllBtn = document.getElementById('tutor-deselect-all-btn');
+  const tutorRosterSearchInput = document.getElementById('tutor-roster-search');
 
   tutorRosterGrid.innerHTML = TUTOR_ROSTER.map(
     (name, idx) => `
@@ -186,6 +222,14 @@ function renderMorningSpecialStatsView(container) {
   }
 
   tutorRosterGrid.addEventListener('change', updateTutorRosterCount);
+
+  tutorRosterSearchInput.addEventListener('input', () => {
+    const query = tutorRosterSearchInput.value.trim().toLowerCase();
+    tutorRosterGrid.querySelectorAll('.tutor-checkbox').forEach((row) => {
+      const name = row.querySelector('input[type="checkbox"]').dataset.name.toLowerCase();
+      row.hidden = query.length > 0 && !name.includes(query);
+    });
+  });
 
   tutorSelectAllBtn.addEventListener('click', () => {
     tutorRosterGrid.querySelectorAll('input[type="checkbox"]').forEach((el) => {
