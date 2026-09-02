@@ -1,5 +1,7 @@
 from datetime import date, datetime
 
+from selenium.common.exceptions import InvalidSessionIdException, WebDriverException
+
 from ..control import ControlState
 from ..lms.auth import login
 from ..lms.consultation import ConsultationLoadError, collect_consultation_records, count_makeup_credits
@@ -60,6 +62,24 @@ def run(job_payload: dict, control: ControlState) -> None:
                 _fail(failures, tutor_name, "회원 팝업 안 열림")
             except ConsultationLoadError:
                 _fail(failures, tutor_name, "상담관리 로딩 실패")
+            except (InvalidSessionIdException, WebDriverException) as exc:
+                # 브라우저가 죽었거나(크래시) 강제 종료된 경우: 이 강사만 실패 처리하고
+                # 끝내는 게 아니라, 브라우저를 재시작해서 남은 강사들을 계속 이어서 처리한다.
+                # 이걸 안 하면 한 번의 크롬 크래시로 남은 강사 전체가 도미노처럼 실패한다.
+                _fail(failures, tutor_name, "브라우저 세션 끊김, 재시작 후 재개")
+                emit_log(f"브라우저 세션이 끊어졌습니다. 재시작을 시도합니다: {exc}", level="error")
+                try:
+                    try:
+                        driver.quit()
+                    except Exception:  # noqa: BLE001 - 이미 죽은 드라이버 종료 시도는 무시
+                        pass
+                    driver = build_driver()
+                    login(driver)
+                    go_to_native_tutor_schedule(driver)
+                    emit_log("브라우저 재시작 및 재로그인 완료, 남은 강사 처리를 이어갑니다.")
+                except Exception as recovery_exc:  # noqa: BLE001
+                    emit_log(f"브라우저 재시작 실패, 작업을 중단합니다: {recovery_exc}", level="error")
+                    break
             except Exception as exc:  # noqa: BLE001 - 강사 단위 오류도 전체 중단 없이 계속 진행해야 함
                 _fail(failures, tutor_name, f"알 수 없는 오류: {exc}")
     finally:
