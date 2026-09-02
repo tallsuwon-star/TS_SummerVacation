@@ -1,4 +1,5 @@
 import time
+from datetime import datetime
 
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.by import By
@@ -9,6 +10,21 @@ from selenium.webdriver.support.ui import WebDriverWait
 from .. import config
 from ..utils.progress import emit_log
 from .driver import switch_to_new_window
+
+
+def _save_debug_screenshot(driver, tutor_name: str, tag: str) -> None:
+    """강사 검색/SCH 버튼을 못 찾았을 때, 그 순간 화면을 남겨서 원인 파악을 돕는다.
+    스크린샷 저장 자체가 실패해도 (예: 이미 죽은 드라이버) 작업 흐름에는 영향 없어야 한다.
+    """
+    try:
+        debug_dir = config.DATA_DIR / "debug_screenshots"
+        debug_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        path = debug_dir / f"{timestamp}_{tag}_{tutor_name}.png"
+        driver.save_screenshot(str(path))
+        emit_log(f"디버그 스크린샷 저장: {path}")
+    except Exception as exc:  # noqa: BLE001 - 스크린샷 저장 실패는 무시하고 원래 오류만 전달
+        emit_log(f"디버그 스크린샷 저장 실패: {exc}", level="error")
 
 # 필터 바의 '강사검색' 라벨 바로 다음에 오는 입력창을 찾는다 (실제 id/class 미확인 상태).
 SEARCH_LABEL_TEXT = "강사검색"
@@ -90,6 +106,7 @@ def click_sch_button(driver, tutor_name: str) -> None:
             EC.presence_of_element_located((By.XPATH, f"//*[{_case_insensitive_text_equals_xpath(tutor_name)}]"))
         )
     except TimeoutException as exc:
+        _save_debug_screenshot(driver, tutor_name, "name_not_found")
         raise TutorNotFoundError(f"검색 결과에서 '{tutor_name}'을(를) 찾지 못했습니다.") from exc
 
     try:
@@ -98,6 +115,7 @@ def click_sch_button(driver, tutor_name: str) -> None:
             "./ancestor::*[.//*[normalize-space(text())='SCH']][1]//*[normalize-space(text())='SCH']",
         )
     except NoSuchElementException as exc:
+        _save_debug_screenshot(driver, tutor_name, "sch_not_found")
         raise SchButtonNotFoundError(f"{tutor_name}의 SCH 버튼을 찾지 못했습니다.") from exc
 
     windows_before = driver.window_handles
