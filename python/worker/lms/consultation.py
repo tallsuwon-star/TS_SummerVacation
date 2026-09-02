@@ -130,10 +130,15 @@ def count_makeup_credits(
     records: list[ConsultationRecord],
     consultation_after: date,
     class_after: date,
+    tutor_name: str = "",
+    member_name: str = "",
 ) -> int:
     """작성자가 이성규/양수아이고, 등록일이 consultation_after 이후이며, 수업일자가 class_after
     이후이고, 수업 시작 시각이 10:00~12:30 사이이며, 구분이 '...보강대기신청'으로 끝나는
     (확정 제외) 기록만 카운트한다.
+
+    실제로 어떤 기록이 카운트됐는지 검증할 수 있도록, 카운트된 건마다 상세 내용을
+    로그로 남긴다 (숫자만 보고는 어떤 기록이 잡혔는지 알 수 없어 검증이 안 되는 문제).
     """
     count = 0
     for record in records:
@@ -150,6 +155,10 @@ def count_makeup_credits(
         if not (AM_WINDOW_START_MINUTES <= record.class_start_minutes <= AM_WINDOW_END_MINUTES):
             continue
         count += 1
+        emit_log(
+            f"[보강권 카운트] {tutor_name}/{member_name} - 등록일 {record.registered_date} "
+            f"작성자 {record.author} - {record.detail}"
+        )
     return count
 
 

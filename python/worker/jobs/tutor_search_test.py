@@ -62,7 +62,7 @@ def run(job_payload: dict, control: ControlState) -> None:
                 open_consultation_tab(driver)
 
                 records = collect_consultation_records(driver)
-                credit_count = count_makeup_credits(records, consultation_after, class_after)
+                credit_count = count_makeup_credits(records, consultation_after, class_after, tutor_name, member_name)
 
                 emit_log(f"[{tutor_name} / {member_name}] 보강권 지급 건수: {credit_count}")
                 emit_record(tutor_name, member_name, credit_count)

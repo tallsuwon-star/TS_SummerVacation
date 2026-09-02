@@ -122,7 +122,9 @@ def _process_tutor(
             open_consultation_tab(driver)
 
             consultation_records = collect_consultation_records(driver)
-            credit_count = count_makeup_credits(consultation_records, consultation_after, class_after)
+            credit_count = count_makeup_credits(
+                consultation_records, consultation_after, class_after, tutor_name, member_name
+            )
 
             records.append(
                 {
