@@ -45,10 +45,15 @@ _LOWER = "abcdefghijklmnopqrstuvwxyz"
 def _case_insensitive_text_equals_xpath(value: str) -> str:
     """XPath 1.0에는 대소문자 무시 비교 함수가 없어 translate()로 흉내낸다.
     강사 이름을 'alfred'처럼 소문자로 입력해도 화면의 'Alfred'와 매칭되도록 하기 위함.
+
+    text() 대신 .(현재 요소의 전체 문자열 값)을 쓴다. '신규' 강사는 이름 앞에
+    <img class="new_ico">가 붙어서 이름 텍스트가 두 개의 텍스트 노드로 쪼개지는데,
+    text()는 그중 첫 번째 노드(이미지 앞의 빈 공백)만 보기 때문에 이름을 절대 못
+    찾는다. .을 쓰면 이미지 유무와 상관없이 요소 안의 전체 텍스트를 모아서 비교한다.
     """
     escaped = value.replace("'", "")
     return (
-        f"translate(normalize-space(text()), '{_UPPER}', '{_LOWER}') = "
+        f"translate(normalize-space(.), '{_UPPER}', '{_LOWER}') = "
         f"translate('{escaped}', '{_UPPER}', '{_LOWER}')"
     )
 
