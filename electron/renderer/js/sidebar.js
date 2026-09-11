@@ -2,6 +2,7 @@
 // electron/renderer/js/views/ 에 뷰 파일을, app.js의 VIEW_RENDERERS에 렌더 함수를 등록한다.
 const JOBS = [
   { id: 'morning_special_stats', label: '오전특강 통계' },
+  { id: 'overdue_report', label: '미납자 관리' },
 ];
 
 const INSTALL_CHECKS = [{ id: 'selenium', label: 'Selenium' }];

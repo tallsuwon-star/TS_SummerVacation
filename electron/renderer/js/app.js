@@ -1,6 +1,7 @@
 // 신규 작업 추가 시 여기에 jobId -> 렌더 함수를 등록한다.
 const VIEW_RENDERERS = {
   morning_special_stats: (container) => window.renderMorningSpecialStatsView(container),
+  overdue_report: (container) => window.renderOverdueReportView(container),
 };
 
 function renderView(jobId) {

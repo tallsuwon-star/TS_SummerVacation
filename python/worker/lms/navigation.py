@@ -15,6 +15,12 @@ from .driver import switch_to_new_window
 TIMETABLE_MENU_SELECTOR = "a.i-clock"
 NATIVE_TUTOR_SCHEDULE_HREF = "/edu/AD_page/schedule/page1_popup.php"
 
+# '수강료관리' LNB 메뉴/'일일정산달력' 버튼의 정확한 태그/클래스(아이콘 클래스 등)를
+# 아직 확인하지 못해, 위 시간표관리처럼 클래스 기반이 아니라 화면에 보이는 텍스트
+# 기준으로 찾는다. 실행해보고 못 찾으면 실제 HTML을 확인해서 선택자를 교체해야 한다.
+DAILY_SETTLEMENT_MENU_TEXT = "수강료관리"
+DAILY_SETTLEMENT_BUTTON_TEXT = "일일정산달력"
+
 
 class NavigationError(Exception):
     pass
@@ -58,3 +64,46 @@ def go_to_native_tutor_schedule(driver) -> None:
     emit_log("원어민 강사 시간표 새 탭으로 전환 완료")
 
     time.sleep(config.REQUEST_DELAY_SECONDS)
+
+
+def go_to_daily_settlement_calendar(driver) -> None:
+    """수강료관리 → 일일정산달력.
+
+    '일일정산달력'이 새 탭으로 열리는지 같은 탭에서 이동하는지 아직 확인되지
+    않아, 새 탭 전환을 먼저 시도해보고 새 탭이 안 열리면 같은 탭에서 페이지가
+    바뀐 것으로 보고 계속 진행한다 (오류로 처리하지 않음).
+    """
+    emit_log(f"'{DAILY_SETTLEMENT_MENU_TEXT}' 메뉴 열기")
+
+    try:
+        menu = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable(
+                (By.XPATH, f"//a[contains(normalize-space(.), '{DAILY_SETTLEMENT_MENU_TEXT}')]")
+            )
+        )
+        menu.click()
+    except TimeoutException as exc:
+        raise NavigationError(f"'{DAILY_SETTLEMENT_MENU_TEXT}' 메뉴를 찾지 못했습니다.") from exc
+
+    time.sleep(config.REQUEST_DELAY_SECONDS)
+
+    emit_log(f"'{DAILY_SETTLEMENT_BUTTON_TEXT}' 클릭")
+
+    try:
+        button = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable(
+                (By.XPATH, f"//*[contains(normalize-space(.), '{DAILY_SETTLEMENT_BUTTON_TEXT}')]")
+            )
+        )
+    except TimeoutException as exc:
+        raise NavigationError(f"'{DAILY_SETTLEMENT_BUTTON_TEXT}' 버튼을 찾지 못했습니다.") from exc
+
+    windows_before = driver.window_handles
+    button.click()
+
+    try:
+        switch_to_new_window(driver, windows_before)
+        emit_log("일일정산달력 새 탭으로 전환 완료")
+    except TimeoutException:
+        time.sleep(config.REQUEST_DELAY_SECONDS)
+        emit_log("일일정산달력 페이지로 이동 완료 (같은 탭)")
