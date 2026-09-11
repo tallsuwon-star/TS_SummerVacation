@@ -17,6 +17,7 @@ function renderOverdueReportView(container) {
       </div>
       <div class="field-hint">
         2023.01.01부터 기준일까지 6개월 단위로 조회해 전체 합계를 내고, 기준일 기준 최근 5개월(이번 달은 1일~기준일)도 별도로 조회합니다.
+        각 구간의 미납자 명단에서 이름이 실제 사람 같지 않은 회원과, 이름에 "test"가 포함된 담당강사 계정도 함께 찾아 보고서 하단에 표시합니다.
       </div>
     </section>
 

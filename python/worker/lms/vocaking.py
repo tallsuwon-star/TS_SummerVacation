@@ -8,6 +8,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
 from .. import config
+from ..utils.name_check import is_suspicious_name as _is_suspicious_name
 from ..utils.progress import emit_log
 
 # 통합LMS(lms.talkstation.co.kr) 안에서의 이동. 상단 네비게이션의 '보카킹' 탭은
@@ -25,12 +26,6 @@ CHARGED_STUDENT_LIST_URL = "https://lms.talkstation.co.kr" + CHARGED_STUDENT_LIS
 PAGE_SIZE = 30
 WEEK_LABEL = {2: "주2회", 3: "주3회", 5: "주5회"}
 LIST_TYPE_LABEL = {"free": "무료", "paid": "유료"}
-
-# 실제 사람 이름이 아닌 것으로 의심되는(가짜/테스트) 계정을 걸러내기 위한 키워드.
-# 이 판정은 100% 정확하다고 보장하지 않는 '의심 후보' 목록을 만드는 용도이며,
-# 최종적으로는 사용자가 이름을 직접 눈으로 확인해야 한다.
-FAKE_NAME_KEYWORDS = ["테스트", "test", "보카", "팝업", "샘플", "sample"]
-_KOREAN_NAME_RE = re.compile(r"^[가-힣]{2,5}$")
 
 
 class VocakingNavigationError(Exception):
@@ -104,13 +99,12 @@ def build_charged_student_list_url(list_type: str, week_cnt: int, page: int, cla
 
 
 def is_suspicious_name(korean_name: str, eng_name: str) -> bool:
-    """실제 사람 이름이 아닌 것으로 의심되는 이름인지 판별한다 (의심 후보용, 확정 아님)."""
-    combined = f"{korean_name} {eng_name}".lower()
-    if any(keyword.lower() in combined for keyword in FAKE_NAME_KEYWORDS):
-        return True
-    if not _KOREAN_NAME_RE.match(korean_name):
-        return True
-    return False
+    """실제 사람 이름이 아닌 것으로 의심되는 이름인지 판별한다 (의심 후보용, 확정 아님).
+
+    회원 이름 검증 로직은 미납자 관리(overdue.py)에서도 동일하게 쓰여서
+    utils/name_check.py로 공용화했다.
+    """
+    return _is_suspicious_name(korean_name, eng_name)
 
 
 def fetch_charged_student_page(driver, list_type: str, week_cnt: int, page: int, class_month: str):

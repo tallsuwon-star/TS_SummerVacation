@@ -12,7 +12,8 @@ from ..control import ControlState
 from ..lms.auth import login
 from ..lms.driver import build_driver
 from ..lms.navigation import go_to_daily_settlement_calendar
-from ..lms.overdue import search_overdue_count
+from ..lms.overdue import fetch_overdue_members
+from ..utils.name_check import is_suspicious_name, is_suspicious_tutor_name
 from ..utils.progress import emit_done, emit_log, emit_progress
 
 JOB_NAME = "overdue_report"
@@ -27,6 +28,11 @@ def run(job_payload: dict, control: ControlState) -> None:
     2023-01-01부터 기준일까지를 6개월 단위로 쪼갠 구간 각각에 대해 LMS
     '수강료관리 > 일일정산달력' 화면에서 미납자 수를 조회한다.
 
+    보카킹 보고와 동일하게, 각 구간의 미납자 명단에서 실제 사람 이름처럼
+    보이지 않는 회원(테스트/가짜 계정 의심)과, 이름에 "test"가 포함된 담당
+    강사 계정을 걸러내 별도 목록으로 보고한다. 인원수 자체는(사이트에 표시된
+    값과 그대로 비교할 수 있도록) 의심 계정을 빼지 않은 원래 숫자를 쓴다.
+
     조회 구간이 13개 안팎으로 많아 중간에 브라우저가 죽을 수 있으므로,
     morning_special_stats와 동일하게 세션이 끊기면 브라우저를 재시작하고
     같은 구간을 한 번 더 시도한 뒤 이어서 진행한다.
@@ -36,11 +42,26 @@ def run(job_payload: dict, control: ControlState) -> None:
     driver = build_driver()
     monthly_results: list[dict] = []
     semiannual_results: list[dict] = []
+    suspicious_hits: list[dict] = []  # {"window": label, "student": str, "tutor": str, "reasons": [str, ...]}
+
+    def check_members(label: str, members: list[tuple[str, str]]) -> None:
+        for student_name, tutor_name in members:
+            reasons = []
+            if is_suspicious_name(student_name):
+                reasons.append("회원 이름 의심")
+            if is_suspicious_tutor_name(tutor_name):
+                reasons.append("강사 이름에 'test' 포함")
+            if reasons:
+                suspicious_hits.append(
+                    {"window": label, "student": student_name, "tutor": tutor_name, "reasons": reasons}
+                )
+                emit_log(f"  ⚠ [{label}] 의심 계정: 회원 '{student_name}' / 강사 '{tutor_name}' ({', '.join(reasons)})")
 
     def process_window(start: date, end: date, label: str) -> int | None:
         nonlocal driver
         try:
-            count = search_overdue_count(driver, start, end)
+            count, members = fetch_overdue_members(driver, start, end)
+            check_members(label, members)
             emit_progress(label, "success", found=count)
             return count
         except (NoSuchElementException, TimeoutException) as exc:
@@ -62,7 +83,8 @@ def run(job_payload: dict, control: ControlState) -> None:
                 login(driver)
                 go_to_daily_settlement_calendar(driver)
                 emit_log("브라우저 재시작 및 재로그인 완료, 같은 구간을 다시 조회합니다.")
-                count = search_overdue_count(driver, start, end)
+                count, members = fetch_overdue_members(driver, start, end)
+                check_members(label, members)
                 emit_progress(label, "success", found=count)
                 return count
             except Exception as recovery_exc:  # noqa: BLE001
@@ -105,7 +127,7 @@ def run(job_payload: dict, control: ControlState) -> None:
         driver.quit()
 
     total = sum(r["count"] for r in semiannual_results if r["count"] is not None)
-    report_text = _format_report(as_of, monthly_results, semiannual_results, total)
+    report_text = _format_report(as_of, monthly_results, semiannual_results, total, suspicious_hits)
 
     emit_done(
         {
@@ -114,6 +136,7 @@ def run(job_payload: dict, control: ControlState) -> None:
             "monthly": monthly_results,
             "semiannual": semiannual_results,
             "total": total,
+            "suspicious": suspicious_hits,
             "reportText": report_text,
             "stopped": stopped,
         }
@@ -163,7 +186,13 @@ def _semiannual_windows(start: date, as_of: date) -> list[tuple[date, date]]:
     return windows
 
 
-def _format_report(as_of: date, monthly: list[dict], semiannual: list[dict], total: int) -> str:
+def _format_report(
+    as_of: date,
+    monthly: list[dict],
+    semiannual: list[dict],
+    total: int,
+    suspicious_hits: list[dict],
+) -> str:
     lines = [f"<미납자 보고 - {as_of.strftime('%y.%m.%d')}>"]
 
     for r in monthly:
@@ -181,6 +210,24 @@ def _format_report(as_of: date, monthly: list[dict], semiannual: list[dict], tot
         s = date.fromisoformat(r["start"]).strftime("%Y.%m.%d")
         e = date.fromisoformat(r["end"]).strftime("%Y.%m.%d")
         lines.append(f"-{s}~{e} : {count_str}")
+
+    if suspicious_hits:
+        # 같은 회원이 여러 구간(월별/6개월)에 걸쳐 중복으로 잡힐 수 있어
+        # (회원, 강사) 기준으로 한 번만 보여준다.
+        seen = set()
+        unique_hits = []
+        for hit in suspicious_hits:
+            key = (hit["student"], hit["tutor"])
+            if key in seen:
+                continue
+            seen.add(key)
+            unique_hits.append(hit)
+
+        lines.append("")
+        lines.append(f"[의심 계정 목록 - 직접 확인 필요, 총 {len(unique_hits)}건]")
+        for hit in unique_hits:
+            reasons = ", ".join(hit["reasons"])
+            lines.append(f"- 회원 '{hit['student']}' / 담당강사 '{hit['tutor']}' ({reasons}) - 최초 발견: {hit['window']}")
 
     return "\n".join(lines)
 
