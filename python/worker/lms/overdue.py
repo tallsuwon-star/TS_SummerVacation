@@ -28,7 +28,13 @@ def search_overdue_count(driver, sdate: date, edate: date) -> int:
     """
     emit_log(f"미납자 조회: {sdate.isoformat()} ~ {edate.isoformat()}")
 
-    sdate_input = driver.find_element(By.ID, "sdate")
+    try:
+        sdate_input = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.ID, "sdate"))
+        )
+    except TimeoutException as exc:
+        raise OverdueSearchError("'미납자기간설정' 입력창(시작일)을 찾지 못했습니다.") from exc
+
     edate_input = driver.find_element(By.ID, "edate")
     driver.execute_script("arguments[0].value = arguments[1];", sdate_input, sdate.isoformat())
     driver.execute_script("arguments[0].value = arguments[1];", edate_input, edate.isoformat())

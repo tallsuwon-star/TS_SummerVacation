@@ -1,7 +1,12 @@
 from calendar import monthrange
 from datetime import date, datetime, timedelta
 
-from selenium.common.exceptions import InvalidSessionIdException, WebDriverException
+from selenium.common.exceptions import (
+    InvalidSessionIdException,
+    NoSuchElementException,
+    TimeoutException,
+    WebDriverException,
+)
 
 from ..control import ControlState
 from ..lms.auth import login
@@ -38,6 +43,14 @@ def run(job_payload: dict, control: ControlState) -> None:
             count = search_overdue_count(driver, start, end)
             emit_progress(label, "success", found=count)
             return count
+        except (NoSuchElementException, TimeoutException) as exc:
+            # 셀렉터를 못 찾거나 응답이 늦은 것뿐 브라우저 자체는 살아있는, 평범한
+            # 실패 케이스다. NoSuchElementException/TimeoutException은 아래
+            # WebDriverException의 하위 클래스라 먼저 잡아주지 않으면 "브라우저
+            # 세션이 끊어졌다"로 오진단해서 불필요하게 브라우저를 재시작하게 된다.
+            emit_log(f"[실패] {label}: {exc}", level="error")
+            emit_progress(label, "failed", reason=str(exc))
+            return None
         except (InvalidSessionIdException, WebDriverException) as exc:
             emit_log(f"브라우저 세션이 끊어졌습니다. 재시작을 시도합니다: {exc}", level="error")
             try:
