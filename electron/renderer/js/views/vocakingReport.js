@@ -2,17 +2,29 @@ function renderVocakingReportView(container) {
   container.innerHTML = `
     <div class="view-header">
       <h1>보카킹 보고</h1>
+      <div class="job-controls">
+        <button id="start-btn" class="btn btn-primary">시작</button>
+        <button id="pause-btn" class="btn btn-ghost" disabled>일시정지</button>
+        <button id="stop-btn" class="btn btn-danger" disabled>중단</button>
+        <button id="copy-btn" class="btn btn-ghost" disabled>결과 클립보드 복사</button>
+      </div>
     </div>
 
     <section class="panel">
-      <div class="field-label login-test-label">
-        통합LMS 이동 테스트 (로그인 → 통합LMS 진입까지만 확인. 이후 단계는 화면 구조 확인 후 이어서 구현 예정)
-      </div>
-      <div class="inline-row">
-        <button id="nav-test-btn" class="btn btn-primary">테스트 시작</button>
-        <button id="nav-test-stop-btn" class="btn btn-danger" disabled>중단</button>
-        <span id="nav-test-status" class="status-badge status-pending">대기중</span>
-      </div>
+      <div class="field-label">진행 현황 (무료/유료 x 주2·3·5회, 총 6개 목록)</div>
+      <table class="dashboard-table" id="vocaking-progress-table">
+        <thead>
+          <tr><th>목록</th><th>상태</th><th>실제 인원</th></tr>
+        </thead>
+        <tbody id="vocaking-progress-body">
+          <tr><td colspan="3" class="empty">아직 시작하지 않았습니다.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="panel" id="vocaking-report-panel" hidden>
+      <div class="field-label login-test-label">보카킹 보고</div>
+      <pre id="vocaking-report-text" class="log-output"></pre>
     </section>
 
     <section class="panel">
@@ -25,14 +37,20 @@ function renderVocakingReportView(container) {
     </section>
   `;
 
-  const navTestBtn = document.getElementById('nav-test-btn');
-  const navTestStopBtn = document.getElementById('nav-test-stop-btn');
-  const navTestStatus = document.getElementById('nav-test-status');
+  const startBtn = document.getElementById('start-btn');
+  const pauseBtn = document.getElementById('pause-btn');
+  const stopBtn = document.getElementById('stop-btn');
+  const copyBtn = document.getElementById('copy-btn');
+
+  const progressBody = document.getElementById('vocaking-progress-body');
+  const reportPanel = document.getElementById('vocaking-report-panel');
+  const reportTextEl = document.getElementById('vocaking-report-text');
 
   const logOutput = document.getElementById('log-output');
   const logSearchInput = document.getElementById('log-search');
   const logSearchCount = document.getElementById('log-search-count');
 
+  // ---- 실행 로그 (검색 필터 포함) ----
   let logSearchQuery = '';
 
   function applyLogLineVisibility(line) {
@@ -68,26 +86,87 @@ function renderVocakingReportView(container) {
     updateLogSearchCount();
   }
 
-  function setNavTestStatus(label, statusClass) {
-    navTestStatus.textContent = label;
-    navTestStatus.className = `status-badge status-${statusClass}`;
+  // ---- 진행 현황 표 (조합 6개, 작업이 시작돼야 이름을 알 수 있어 실시간으로 행을 추가/갱신) ----
+  const progressRows = new Map(); // label -> <tr>
+
+  function resetProgressTable() {
+    progressRows.clear();
+    progressBody.innerHTML = '<tr><td colspan="3" class="empty">진행 중...</td></tr>';
   }
 
-  navTestBtn.addEventListener('click', async () => {
+  function upsertProgressRow(label, status, found, reason) {
+    if (progressRows.size === 0) {
+      progressBody.innerHTML = '';
+    }
+
+    let row = progressRows.get(label);
+    if (!row) {
+      row = document.createElement('tr');
+      row.innerHTML = '<td></td><td></td><td></td>';
+      progressBody.appendChild(row);
+      progressRows.set(label, row);
+    }
+
+    const statusLabel = { processing: '진행중', success: '완료', failed: '실패' }[status] || status;
+    row.className = status === 'failed' ? 'row-failed' : '';
+    row.children[0].textContent = label;
+    row.children[1].innerHTML = `<span class="status-badge status-${status}">${statusLabel}</span>`;
+    row.children[2].textContent = status === 'success' ? `${found}명` : status === 'failed' ? (reason || '-') : '-';
+  }
+
+  // ---- 시작/일시정지/중단 ----
+  let paused = false;
+  let lastDoneSummary = null;
+
+  startBtn.addEventListener('click', async () => {
+    resetProgressTable();
+    reportPanel.hidden = true;
+    reportTextEl.textContent = '';
+    lastDoneSummary = null;
+    paused = false;
+    pauseBtn.textContent = '일시정지';
+
     const result = await window.api.startJob({ jobId: 'vocaking_report' });
     if (!result.started) {
       alert('이미 실행 중인 작업이 있습니다.');
       return;
     }
 
-    setNavTestStatus('진행 중', 'processing');
-    navTestBtn.disabled = true;
-    navTestStopBtn.disabled = false;
+    startBtn.disabled = true;
+    pauseBtn.disabled = false;
+    stopBtn.disabled = false;
+    copyBtn.disabled = true;
   });
 
-  navTestStopBtn.addEventListener('click', async () => {
+  pauseBtn.addEventListener('click', async () => {
+    if (!paused) {
+      await window.api.pauseJob();
+      paused = true;
+      pauseBtn.textContent = '재개';
+    } else {
+      await window.api.resumeJob();
+      paused = false;
+      pauseBtn.textContent = '일시정지';
+    }
+  });
+
+  stopBtn.addEventListener('click', async () => {
     await window.api.stopJob();
-    navTestStopBtn.disabled = true;
+    stopBtn.disabled = true;
+    pauseBtn.disabled = true;
+  });
+
+  copyBtn.addEventListener('click', async () => {
+    if (!lastDoneSummary) return;
+    const result = await window.api.copySummary(lastDoneSummary.reportText);
+    copyBtn.textContent = result.success ? '복사됨!' : '복사 실패';
+    setTimeout(() => {
+      copyBtn.textContent = '결과 클립보드 복사';
+    }, 1500);
+  });
+
+  window.api.onJobProgress((data) => {
+    upsertProgressRow(data.tutor, data.status, data.found, data.reason);
   });
 
   window.api.onJobLog((data) => {
@@ -95,15 +174,22 @@ function renderVocakingReportView(container) {
   });
 
   window.api.onJobDone((data) => {
-    if (typeof data.code === 'undefined') return;
+    // python worker의 emit_done(요약 정보)과 프로세스 종료(code 있음) 두 번 올 수 있다.
+    if (typeof data.code === 'undefined') {
+      if (data.summary) {
+        lastDoneSummary = data.summary;
+        reportPanel.hidden = false;
+        reportTextEl.textContent = data.summary.reportText;
+      }
+      return;
+    }
 
     appendLog('info', `작업 프로세스 종료 (종료 코드: ${data.code})`);
-    setNavTestStatus(
-      data.code === 0 ? '완료 (브라우저 창 확인)' : '실패 (로그 확인)',
-      data.code === 0 ? 'success' : 'failed'
-    );
-    navTestBtn.disabled = false;
-    navTestStopBtn.disabled = true;
+
+    startBtn.disabled = false;
+    pauseBtn.disabled = true;
+    stopBtn.disabled = true;
+    copyBtn.disabled = !lastDoneSummary;
   });
 }
 
