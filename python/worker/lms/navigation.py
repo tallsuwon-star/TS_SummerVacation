@@ -77,11 +77,14 @@ def go_to_daily_settlement_calendar(driver) -> None:
 
     try:
         menu = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable(
+            EC.presence_of_element_located(
                 (By.XPATH, f"//a[contains(normalize-space(.), '{DAILY_SETTLEMENT_MENU_TEXT}')]")
             )
         )
-        menu.click()
+        # 반응형 레이아웃 때문에 화면 밖(예: y좌표 음수)에 숨겨진 메뉴 사본이 먼저
+        # 잡혀서 일반 click()이 "element not clickable"로 실패하는 경우가 있어,
+        # 화면에 실제로 보이는지와 무관하게 onclick을 그대로 실행하는 JS 클릭을 쓴다.
+        driver.execute_script("arguments[0].click();", menu)
     except TimeoutException as exc:
         raise NavigationError(f"'{DAILY_SETTLEMENT_MENU_TEXT}' 메뉴를 찾지 못했습니다.") from exc
 
@@ -91,15 +94,19 @@ def go_to_daily_settlement_calendar(driver) -> None:
 
     try:
         button = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable(
-                (By.XPATH, f"//*[contains(normalize-space(.), '{DAILY_SETTLEMENT_BUTTON_TEXT}')]")
+            EC.presence_of_element_located(
+                (
+                    By.XPATH,
+                    f"//a[contains(normalize-space(.), '{DAILY_SETTLEMENT_BUTTON_TEXT}')] "
+                    f"| //button[contains(normalize-space(.), '{DAILY_SETTLEMENT_BUTTON_TEXT}')]",
+                )
             )
         )
     except TimeoutException as exc:
         raise NavigationError(f"'{DAILY_SETTLEMENT_BUTTON_TEXT}' 버튼을 찾지 못했습니다.") from exc
 
     windows_before = driver.window_handles
-    button.click()
+    driver.execute_script("arguments[0].click();", button)
 
     try:
         switch_to_new_window(driver, windows_before)
