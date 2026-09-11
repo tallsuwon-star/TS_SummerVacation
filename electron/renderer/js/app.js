@@ -2,6 +2,7 @@
 const VIEW_RENDERERS = {
   morning_special_stats: (container) => window.renderMorningSpecialStatsView(container),
   overdue_report: (container) => window.renderOverdueReportView(container),
+  vocaking_report: (container) => window.renderVocakingReportView(container),
 };
 
 function renderView(jobId) {

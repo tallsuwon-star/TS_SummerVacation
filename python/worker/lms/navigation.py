@@ -21,6 +21,11 @@ NATIVE_TUTOR_SCHEDULE_HREF = "/edu/AD_page/schedule/page1_popup.php"
 DAILY_SETTLEMENT_MENU_TEXT = "수강료관리"
 DAILY_SETTLEMENT_BUTTON_TEXT = "일일정산달력"
 
+# 상단 정보바(#mws-default-info)의 '통합LMS' 링크. onclick="tsb_login_check(...)"가
+# #tsb_login_check 폼을 target="_tsb_311"(새 창)으로 제출하는 SSO 로그인 방식이라,
+# 클릭 후 새로 열리는 창으로 전환하고 리다이렉트 체인이 끝날 때까지 기다려야 한다.
+INTEGRATED_LMS_LINK_TEXT = "통합LMS"
+
 
 class NavigationError(Exception):
     pass
@@ -114,3 +119,38 @@ def go_to_daily_settlement_calendar(driver) -> None:
     except TimeoutException:
         time.sleep(config.REQUEST_DELAY_SECONDS)
         emit_log("일일정산달력 페이지로 이동 완료 (같은 탭)")
+
+
+def go_to_integrated_lms(driver) -> None:
+    """상단 정보바의 '통합LMS' 링크로 이동 (SSO 새 창 로그인).
+
+    아직 이 새 창이 최종적으로 어느 화면에 떨어지는지(보카킹 화면 바로인지,
+    별도 홈 화면인지) 확인되지 않아, 이동 후 현재 URL/제목을 로그로 남긴다.
+    """
+    emit_log(f"'{INTEGRATED_LMS_LINK_TEXT}' 이동")
+
+    try:
+        link = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located(
+                (
+                    By.XPATH,
+                    f"//div[@id='mws-default-info']//a[contains(normalize-space(.), '{INTEGRATED_LMS_LINK_TEXT}')]",
+                )
+            )
+        )
+    except TimeoutException as exc:
+        raise NavigationError(f"'{INTEGRATED_LMS_LINK_TEXT}' 링크를 찾지 못했습니다.") from exc
+
+    windows_before = driver.window_handles
+    driver.execute_script("arguments[0].click();", link)
+
+    try:
+        switch_to_new_window(driver, windows_before, timeout=15)
+    except TimeoutException as exc:
+        raise NavigationError(f"'{INTEGRATED_LMS_LINK_TEXT}' 새 창이 열리지 않았습니다.") from exc
+
+    emit_log(f"'{INTEGRATED_LMS_LINK_TEXT}' 새 창으로 전환 완료, 로그인 리다이렉트 대기 중")
+    # SSO 리다이렉트 체인(폼 제출 -> login_check.php -> 최종 목적지)이 끝날 시간을 준다.
+    time.sleep(config.REQUEST_DELAY_SECONDS * 2)
+    emit_log(f"현재 URL: {driver.current_url}")
+    emit_log(f"페이지 제목: {driver.title}")

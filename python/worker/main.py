@@ -9,7 +9,7 @@ for _stream in (sys.stdin, sys.stdout, sys.stderr):
         _stream.reconfigure(encoding="utf-8")
 
 from .control import ControlState
-from .jobs import login_test, morning_special_stats, overdue_report, tutor_search_test
+from .jobs import login_test, morning_special_stats, overdue_report, tutor_search_test, vocaking_report
 from .utils.progress import emit_log
 
 # 신규 작업(job) 추가 시 여기에 jobId -> run 함수를 등록한다.
@@ -18,6 +18,7 @@ JOBS = {
     "login_test": login_test.run,
     "tutor_search_test": tutor_search_test.run,
     "overdue_report": overdue_report.run,
+    "vocaking_report": vocaking_report.run,
 }
 
 
