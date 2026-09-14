@@ -11,31 +11,31 @@
 
 import sys
 
+from PyInstaller.utils.hooks import collect_submodules
+
 sys.setrecursionlimit(5000)
 
 block_cipher = None
+
+# selenium은 webdriver.Chrome처럼 쓸 때 필요한 서브모듈(selenium.webdriver.chrome.webdriver 등)을
+# selenium.webdriver.__getattr__로 그때그때 지연 임포트한다. 이런 지연 임포트는 PyInstaller가
+# 정적 분석만으로는 찾지 못해서 몇 개만 hiddenimports에 적어두면 꼭 빠지는 게 생긴다.
+# collect_submodules로 selenium 패키지 전체를 통째로 포함시켜 이 문제를 근본적으로 막는다.
+hiddenimports = collect_submodules('selenium') + [
+    'gspread',
+    'google.auth',
+    'google.auth.transport.requests',
+    'google.oauth2.service_account',
+    'dotenv',
+    'pyperclip',
+]
 
 a = Analysis(
     ['run_worker.py'],
     pathex=['.'],
     binaries=[],
     datas=[],
-    hiddenimports=[
-        'selenium',
-        'selenium.webdriver',
-        'selenium.webdriver.chrome.options',
-        'selenium.webdriver.chrome.service',
-        'selenium.webdriver.common.by',
-        'selenium.webdriver.common.keys',
-        'selenium.webdriver.support.ui',
-        'selenium.webdriver.support.expected_conditions',
-        'gspread',
-        'google.auth',
-        'google.auth.transport.requests',
-        'google.oauth2.service_account',
-        'dotenv',
-        'pyperclip',
-    ],
+    hiddenimports=hiddenimports,
     hookspath=[],
     runtime_hooks=[],
     excludes=[],
