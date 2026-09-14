@@ -24,8 +24,17 @@ LMS_BASE_URL = os.getenv("LMS_BASE_URL", "")
 GOOGLE_SHEETS_CREDENTIALS_PATH = os.getenv("GOOGLE_SHEETS_CREDENTIALS_PATH", "")
 GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID", "")
 
+# 네이버 스마트스토어 자동화 (python/worker/naver/, jobs/naver_store_report.py)
+NAVER_ID = os.getenv("NAVER_ID", "")
+NAVER_PASSWORD = os.getenv("NAVER_PASSWORD", "")
+
 DATA_DIR = ROOT_DIR / "data"
 LOG_DIR = ROOT_DIR / "log"
+
+# 스마트스토어 로그인 세션(쿠키)을 유지하는 영구 크롬 프로필과, 발송처리
+# 엑셀을 내려받을 고정 폴더. 둘 다 매 실행 새로 만들지 않고 재사용한다.
+NAVER_CHROME_PROFILE_DIR = ROOT_DIR / ".naver-chrome-profile"
+NAVER_DOWNLOAD_DIR = ROOT_DIR / "downloads" / "naver_store"
 
 # 요청/클릭 사이 딜레이 (초)
 REQUEST_DELAY_SECONDS = 2.5

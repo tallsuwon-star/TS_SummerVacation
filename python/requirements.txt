@@ -3,3 +3,4 @@ gspread>=6.0
 google-auth>=2.29
 python-dotenv>=1.0
 pyperclip>=1.8
+openpyxl>=3.1
