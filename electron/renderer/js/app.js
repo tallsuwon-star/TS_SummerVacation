@@ -37,12 +37,46 @@ function applyTheme(theme) {
   document.getElementById('theme-toggle').textContent = theme === 'dark' ? '☀️' : '🌙';
 }
 
+async function initLmsSettingsModal() {
+  const modal = document.getElementById('lms-settings-modal');
+  const idInput = document.getElementById('lms-settings-id');
+  const passwordInput = document.getElementById('lms-settings-password');
+  const baseUrlInput = document.getElementById('lms-settings-base-url');
+
+  document.getElementById('lms-settings-btn').addEventListener('click', async () => {
+    const settings = await window.api.getSettings();
+    const creds = settings.lmsCredentials || {};
+    idInput.value = creds.id || '';
+    passwordInput.value = creds.password || '';
+    baseUrlInput.value = creds.baseUrl || '';
+    modal.classList.remove('hidden');
+  });
+
+  document.getElementById('lms-settings-cancel-btn').addEventListener('click', () => {
+    modal.classList.add('hidden');
+  });
+
+  document.getElementById('lms-settings-save-btn').addEventListener('click', async () => {
+    await window.api.setSettings({
+      lmsCredentials: {
+        id: idInput.value.trim(),
+        password: passwordInput.value,
+        baseUrl: baseUrlInput.value.trim(),
+      },
+    });
+    modal.classList.add('hidden');
+  });
+}
+
 async function bootstrap() {
+  window.appConfig = await window.api.getAppConfig();
+
   await initTheme();
+  initLmsSettingsModal();
   window.sidebar.renderJobNav();
   await window.sidebar.renderInstallNav();
   window.sidebar.wireInstallModal();
-  renderView(window.sidebar.JOBS[0].id);
+  renderView(window.sidebar.getVisibleJobs()[0].id);
 }
 
 document.addEventListener('DOMContentLoaded', bootstrap);

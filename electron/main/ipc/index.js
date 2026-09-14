@@ -1,5 +1,6 @@
 const { ipcMain } = require('electron');
 const store = require('../store');
+const { APP_VARIANT } = require('../variant');
 const setupCheck = require('./setupCheck');
 const pythonRunner = require('./pythonRunner');
 const clipboard = require('./clipboard');
@@ -10,6 +11,8 @@ function registerIpcHandlers(mainWindow) {
     Object.entries(partial).forEach(([key, value]) => store.set(key, value));
     return store.store;
   });
+
+  ipcMain.handle('app:getConfig', () => ({ variant: APP_VARIANT }));
 
   ipcMain.handle('setup:checkSelenium', () => setupCheck.checkSelenium());
   ipcMain.handle('setup:installSelenium', () => setupCheck.installSelenium(mainWindow));

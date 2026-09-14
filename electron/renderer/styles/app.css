@@ -56,6 +56,11 @@ html, body {
   background: var(--surface-alt);
 }
 
+.sidebar-header > div {
+  display: flex;
+  gap: 4px;
+}
+
 .nav-section {
   margin-bottom: 20px;
 }

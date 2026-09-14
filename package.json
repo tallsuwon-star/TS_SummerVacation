@@ -5,13 +5,36 @@
   "main": "electron/main/main.js",
   "private": true,
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "build:overdue-exe": "node scripts/build-overdue-exe.js"
   },
   "license": "UNLICENSED",
   "dependencies": {
     "electron-store": "^8.2.0"
   },
   "devDependencies": {
-    "electron": "^44.0.0"
+    "electron": "^44.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "co.kr.talkstation.lms-overdue-report",
+    "productName": "미납자 관리",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      "package.json",
+      "!electron/**/*.map"
+    ],
+    "extraResources": [
+      {
+        "from": "python/dist/worker",
+        "to": "worker"
+      }
+    ],
+    "win": {
+      "target": "portable"
+    }
   }
 }

@@ -5,6 +5,9 @@ contextBridge.exposeInMainWorld('api', {
   getSettings: () => ipcRenderer.invoke('settings:get'),
   setSettings: (partial) => ipcRenderer.invoke('settings:set', partial),
 
+  // 빌드 변형 (전체 앱 vs 미납자 관리 전용 배포용 exe)
+  getAppConfig: () => ipcRenderer.invoke('app:getConfig'),
+
   // Selenium 설치 확인/설치
   checkSelenium: () => ipcRenderer.invoke('setup:checkSelenium'),
   installSelenium: () => ipcRenderer.invoke('setup:installSelenium'),

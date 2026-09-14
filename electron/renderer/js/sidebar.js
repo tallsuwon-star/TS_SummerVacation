@@ -1,6 +1,6 @@
 // 신규 작업(job) 추가 시 여기에 항목을 등록하고,
 // electron/renderer/js/views/ 에 뷰 파일을, app.js의 VIEW_RENDERERS에 렌더 함수를 등록한다.
-const JOBS = [
+const ALL_JOBS = [
   { id: 'morning_special_stats', label: '오전특강 통계' },
   { id: 'overdue_report', label: '미납자 관리' },
   { id: 'vocaking_report', label: '보카킹 보고' },
@@ -8,13 +8,26 @@ const JOBS = [
 
 const INSTALL_CHECKS = [{ id: 'selenium', label: 'Selenium' }];
 
-let activeJobId = JOBS[0].id;
+// 'overdue_only' 배포용 exe(scripts/build-overdue-exe.js 참고)에서는 '미납자
+// 관리'만 노출한다. window.appConfig는 app.js의 bootstrap()에서 렌더 전에
+// 미리 채워둔다.
+function getVisibleJobs() {
+  if (window.appConfig?.variant === 'overdue_only') {
+    return ALL_JOBS.filter((job) => job.id === 'overdue_report');
+  }
+  return ALL_JOBS;
+}
+
+let activeJobId = null;
 
 function renderJobNav() {
+  const jobs = getVisibleJobs();
+  if (!activeJobId) activeJobId = jobs[0].id;
+
   const list = document.getElementById('job-nav-list');
   list.innerHTML = '';
 
-  JOBS.forEach((job) => {
+  jobs.forEach((job) => {
     const li = document.createElement('li');
     li.className = `nav-item${job.id === activeJobId ? ' active' : ''}`;
     li.textContent = job.label;
@@ -30,6 +43,15 @@ function renderJobNav() {
 }
 
 async function renderInstallNav() {
+  // 배포용(overdue_only) exe는 PyInstaller가 Python까지 이미 넣어서 배포하므로
+  // Selenium 설치 확인 UI 자체가 필요 없다 -> 섹션을 통째로 숨긴다.
+  const section = document.getElementById('install-nav-section');
+  if (window.appConfig?.variant === 'overdue_only') {
+    section.hidden = true;
+    return;
+  }
+  section.hidden = false;
+
   const list = document.getElementById('install-nav-list');
   list.innerHTML = '';
 
@@ -85,4 +107,4 @@ function wireInstallModal() {
   });
 }
 
-window.sidebar = { renderJobNav, renderInstallNav, wireInstallModal, JOBS };
+window.sidebar = { renderJobNav, renderInstallNav, wireInstallModal, ALL_JOBS, getVisibleJobs };
