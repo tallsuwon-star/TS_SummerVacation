@@ -12,6 +12,10 @@ release/
 credentials/
 *.log
 
+# 네이버 스마트스토어 로그인 세션 + 다운로드한 엑셀 파일
+/.naver-chrome-profile/
+/downloads/
+
 __pycache__/
 *.pyc
 .venv/

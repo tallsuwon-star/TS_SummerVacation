@@ -71,3 +71,14 @@ npm start
 `python/worker/lms/*.py`의 각 함수는 구조와 TODO만 잡혀 있고, 실제 LMS 화면의
 CSS 선택자는 아직 채워지지 않았다. 다음 단계에서 실제 화면을 보면서
 `driver.find_element(...)` 부분을 채워 넣으면 된다.
+
+### 네이버 스토어 (`naver_store_report`)
+
+LMS와는 별개로, 네이버 스마트스토어 발주(주문)확인/발송관리 화면을 자동으로
+열어주는 작업. `python/worker/naver/` (driver/auth/smartstore) + `jobs/naver_store_report.py`.
+
+- 완료: 로그인(팝업 창 추적, 캡챠/재인증 화면 사람이 직접 처리, 세션 재사용),
+  판매관리 > 발주(주문)확인/발송관리 페이지 진입까지 실제 화면으로 검증됨.
+- TODO: 그 화면의 "엑셀 다운로드" 버튼 실제 선택자를 받아서, 다운로드 ->
+  `openpyxl`로 파싱 -> 구글 시트(`GOOGLE_SHEET_ID`) 기록까지 이어붙이기.
+- `.env`에 `NAVER_ID` / `NAVER_PASSWORD` 필요.

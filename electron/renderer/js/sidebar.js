@@ -4,6 +4,7 @@ const ALL_JOBS = [
   { id: 'morning_special_stats', label: '오전특강 통계' },
   { id: 'overdue_report', label: '미납자 관리' },
   { id: 'vocaking_report', label: '보카킹 보고' },
+  { id: 'naver_store_report', label: '네이버 스토어' },
 ];
 
 const INSTALL_CHECKS = [{ id: 'selenium', label: 'Selenium' }];

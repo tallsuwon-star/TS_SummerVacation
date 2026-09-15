@@ -3,6 +3,7 @@ const VIEW_RENDERERS = {
   morning_special_stats: (container) => window.renderMorningSpecialStatsView(container),
   overdue_report: (container) => window.renderOverdueReportView(container),
   vocaking_report: (container) => window.renderVocakingReportView(container),
+  naver_store_report: (container) => window.renderNaverStoreReportView(container),
 };
 
 function renderView(jobId) {
