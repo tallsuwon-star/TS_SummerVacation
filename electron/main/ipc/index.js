@@ -4,6 +4,7 @@ const { APP_VARIANT } = require('../variant');
 const setupCheck = require('./setupCheck');
 const pythonRunner = require('./pythonRunner');
 const clipboard = require('./clipboard');
+const gitLog = require('./gitLog');
 
 function registerIpcHandlers(mainWindow) {
   ipcMain.handle('settings:get', () => store.store);
@@ -23,6 +24,8 @@ function registerIpcHandlers(mainWindow) {
   ipcMain.handle('job:stop', () => pythonRunner.stop());
 
   ipcMain.handle('clipboard:copy', (_event, text) => clipboard.copy(text));
+
+  ipcMain.handle('report:getTodayCommits', () => gitLog.getTodayCommits());
 }
 
 module.exports = registerIpcHandlers;

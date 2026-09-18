@@ -19,6 +19,12 @@ const store = new Store({
       password: '',
       baseUrl: 'http://talkstation.co.kr/edu/AD_page/',
     },
+    // 업무보고 화면의 부서/작성자(고정값)와 날짜별 작성 중인 내용(임시저장).
+    reportProfile: {
+      department: '',
+      author: '',
+    },
+    workReportDrafts: {}, // { 'YYYY-MM-DD': { dailyWork, tomorrowPlan, issues } }
   },
 });
 

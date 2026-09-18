@@ -4,6 +4,7 @@ const VIEW_RENDERERS = {
   overdue_report: (container) => window.renderOverdueReportView(container),
   vocaking_report: (container) => window.renderVocakingReportView(container),
   naver_store_report: (container) => window.renderNaverStoreReportView(container),
+  work_report: (container) => window.renderWorkReportView(container),
 };
 
 function renderView(jobId) {

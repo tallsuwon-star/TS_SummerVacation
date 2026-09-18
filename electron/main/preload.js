@@ -40,4 +40,7 @@ contextBridge.exposeInMainWorld('api', {
 
   // 결과 요약 클립보드 복사 (pyperclip)
   copySummary: (text) => ipcRenderer.invoke('clipboard:copy', text),
+
+  // 업무보고: 오늘 커밋 내역 불러오기
+  getTodayCommits: () => ipcRenderer.invoke('report:getTodayCommits'),
 });
