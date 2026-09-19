@@ -29,22 +29,22 @@ COOKIES_FILENAME = "office_cookies.json"
 
 LOGOUT_MODAL_ID = "logoutModal"  # 로그인된 페이지에만 존재하는 요소 (사용자가 알려준 HTML 기준)
 
-# 로그인 폼 후보 선택자들. 위에서부터 순서대로 시도한다.
-ID_INPUT_SELECTORS = [
-    (By.CSS_SELECTOR, "input[name='member_id']"),
-    (By.CSS_SELECTOR, "input[name='userid']"),
-    (By.CSS_SELECTOR, "input[name='username']"),
-    (By.CSS_SELECTOR, "input[name='id']"),
-    (By.CSS_SELECTOR, "input[name='email']"),
-    (By.ID, "member_id"),
-    (By.ID, "userid"),
-    (By.ID, "username"),
-    (By.ID, "id"),
-    (By.ID, "email"),
+# 로그인 폼 후보 선택자들. 하나씩 순서대로 기다리면 후보마다 최대 8초씩
+# 낭비되므로, 아래 CSS 선택자들을 콤마로 합쳐 "이 중 아무거나 하나"가
+# 나타날 때까지 딱 한 번만 기다린다(_find_first_css 참고).
+ID_INPUT_CANDIDATES = [
+    "input[name='member_id']",
+    "input[name='userid']",
+    "input[name='username']",
+    "input[name='id']",
+    "input[name='email']",
+    "#member_id",
+    "#userid",
+    "#username",
+    "#id",
+    "#email",
 ]
-PASSWORD_INPUT_SELECTORS = [
-    (By.CSS_SELECTOR, "input[type='password']"),
-]
+PASSWORD_INPUT_CANDIDATES = ["input[type='password']"]
 LOGIN_BUTTON_XPATH = (
     "//button[contains(., '로그인') or contains(., 'Login') or contains(., 'LOGIN')] "
     "| //input[@type='submit' and (contains(@value, '로그인') or contains(@value, 'Login'))]"
@@ -78,8 +78,12 @@ def login(driver) -> None:
         _save_session(driver)
         return
 
-    id_input = _find_first(driver, ID_INPUT_SELECTORS)
-    password_input = _find_first(driver, PASSWORD_INPUT_SELECTORS)
+    id_input, id_selector = _find_first_css(driver, ID_INPUT_CANDIDATES)
+    password_input, password_selector = _find_first_css(driver, PASSWORD_INPUT_CANDIDATES)
+    if id_input is not None:
+        emit_log(f"아이디 입력창을 찾았습니다: {id_selector}")
+    if password_input is not None:
+        emit_log(f"비밀번호 입력창을 찾았습니다: {password_selector}")
 
     if id_input is None or password_input is None:
         raise LoginFailedError(
@@ -118,13 +122,21 @@ def login(driver) -> None:
     _save_session(driver)
 
 
-def _find_first(driver, selectors, timeout: float = 8):
-    for by, selector in selectors:
-        try:
-            return WebDriverWait(driver, timeout).until(EC.presence_of_element_located((by, selector)))
-        except TimeoutException:
-            continue
-    return None
+def _find_first_css(driver, candidates: list[str], timeout: float = 8):
+    """candidates를 콤마로 합친 하나의 CSS 선택자로 한 번만 기다려서, 이 중
+    가장 먼저 매치되는 요소와 그 선택자를 함께 반환한다. (selector, None)이면
+    아무 후보도 못 찾은 것."""
+    combined = ", ".join(candidates)
+    try:
+        WebDriverWait(driver, timeout).until(EC.presence_of_element_located((By.CSS_SELECTOR, combined)))
+    except TimeoutException:
+        return None, None
+
+    for candidate in candidates:
+        matches = driver.find_elements(By.CSS_SELECTOR, candidate)
+        if matches:
+            return matches[0], candidate
+    return None, None
 
 
 def _is_logged_in(driver) -> bool:
