@@ -120,18 +120,23 @@ function renderWorkReportView(container) {
         위 날짜로 /report/write를 열어 크롤링 데이터(지난달/이번달 계획, 지난주/다음주, 명일 계획)와
         아래 체크박스에 따라 이 화면의 초안(금일 업무 내용/특이사항)을 채운 뒤 "글쓰기"를 자동으로 누릅니다.
       </div>
-      <div class="field" style="flex-direction: row; align-items: center; gap: 8px;">
+      <div class="checkbox-row">
         <input type="checkbox" id="use-local-draft-checkbox" checked />
         <label for="use-local-draft-checkbox">금일 업무 내용/특이사항은 이 화면에서 작성한 내용을 사용</label>
       </div>
       <div class="field">
         <label class="field-label" for="attach-files-input">첨부파일 (선택)</label>
-        <input type="file" id="attach-files-input" multiple />
+        <div class="file-input-row">
+          <input type="file" id="attach-files-input" multiple />
+        </div>
       </div>
-      <div class="log-toolbar">
+      <div class="log-toolbar" style="margin-top: 12px;">
         <button id="submit-btn" class="btn btn-primary">자동 제출</button>
       </div>
-      <div id="submit-result" class="field-hint" style="margin-top: 8px;"></div>
+      <div id="submit-result" class="result-banner" hidden>
+        <span id="submit-result-icon" class="result-banner-icon"></span>
+        <span id="submit-result-text"></span>
+      </div>
     </section>
 
     <section class="panel">
@@ -169,6 +174,8 @@ function renderWorkReportView(container) {
   const attachFilesInput = document.getElementById('attach-files-input');
   const submitBtn = document.getElementById('submit-btn');
   const submitResult = document.getElementById('submit-result');
+  const submitResultIcon = document.getElementById('submit-result-icon');
+  const submitResultText = document.getElementById('submit-result-text');
   const jobLogOutput = document.getElementById('job-log-output');
   const jobLogSearchInput = document.getElementById('job-log-search');
   const jobLogSearchCount = document.getElementById('job-log-search-count');
@@ -550,6 +557,18 @@ function renderWorkReportView(container) {
     updateJobLogSearchCount();
   }
 
+  function showSubmitResult(kind, html) {
+    submitResult.hidden = false;
+    submitResult.className = `result-banner result-banner-${kind}`;
+    submitResultIcon.textContent = kind === 'success' ? '✅' : '⚠️';
+    submitResultText.innerHTML = html;
+  }
+
+  function hideSubmitResult() {
+    submitResult.hidden = true;
+    submitResult.className = 'result-banner';
+  }
+
   // ---- ① 크롤링 ----
   async function refreshCrawlStatus() {
     const data = await window.api.getOfficeReports();
@@ -591,7 +610,7 @@ function renderWorkReportView(container) {
     }
 
     jobLogOutput.innerHTML = '';
-    submitResult.textContent = '';
+    hideSubmitResult();
     activeJobKind = 'submit';
 
     const filePaths = Array.from(attachFilesInput.files || [])
@@ -632,10 +651,10 @@ function renderWorkReportView(container) {
       } else if (activeJobKind === 'submit' && data.summary) {
         const summary = data.summary;
         if (summary.success) {
-          submitResult.textContent = `제출 완료. 이동한 화면: ${summary.finalUrl || ''}`;
+          showSubmitResult('success', `제출 완료 — <a href="${summary.finalUrl}" target="_blank">${summary.finalUrl || ''}</a>`);
         } else {
-          const alertPart = summary.alertText ? ` / 알림창 내용: "${summary.alertText}"` : '';
-          submitResult.textContent = `제출 실패: ${summary.error || '알 수 없는 오류'}${alertPart}`;
+          const alertPart = summary.alertText ? ` (알림창: "${summary.alertText}")` : '';
+          showSubmitResult('error', `제출 실패 — ${summary.error || '알 수 없는 오류'}${alertPart}`);
         }
       }
       return;
