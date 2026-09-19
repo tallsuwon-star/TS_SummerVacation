@@ -255,12 +255,24 @@ function renderWorkReportView(container) {
     return (prev.workItems || []).find((item) => (item.title || '').trim() === title.trim());
   }
 
+  // 행 DOM은 한 번만 만들고, 타이핑할 때마다 통째로 다시 그리지 않는다 —
+  // input을 매번 새로 만들면 한글 조합(IME) 중간에 입력창이 교체돼서
+  // 자모가 분리되어 깨지는 문제가 있었다 (예: "ㅁㄴㅇㄴㅁㅁㅇ").
+  function refreshRowDerivedState(item, els) {
+    const prevItem = item.title ? findPreviousItem(item.title) : null;
+    els.progressLabel.textContent = prevItem ? `진행률 % (전날 ${prevItem.progress}%)` : '진행률 %';
+
+    const decreased = prevItem && Number(item.progress) < Number(prevItem.progress);
+    els.reasonRow.hidden = !decreased;
+    if (!decreased && item.decreaseReason) {
+      item.decreaseReason = '';
+      els.reasonInput.value = '';
+    }
+  }
+
   function renderWorkItems() {
     workItemsList.innerHTML = '';
     workItems.forEach((item, index) => {
-      const prevItem = item.title ? findPreviousItem(item.title) : null;
-      const decreased = prevItem && Number(item.progress) < Number(prevItem.progress);
-
       const row = document.createElement('div');
       row.className = 'criteria-panel';
       row.style.marginBottom = '8px';
@@ -272,29 +284,18 @@ function renderWorkReportView(container) {
       titleInput.type = 'text';
       titleInput.value = item.title || '';
       titleInput.placeholder = '예: 업무보고 자동화 개발';
-      titleInput.addEventListener('input', () => {
-        item.title = titleInput.value;
-        renderWorkItems();
-        scheduleSaveDraft();
-      });
       titleField.appendChild(titleInput);
 
       const progressField = document.createElement('div');
       progressField.className = 'field';
       const progressLabel = document.createElement('label');
       progressLabel.className = 'field-label';
-      progressLabel.textContent = prevItem ? `진행률 % (전날 ${prevItem.progress}%)` : '진행률 %';
       progressField.appendChild(progressLabel);
       const progressInput = document.createElement('input');
       progressInput.type = 'number';
       progressInput.min = '0';
       progressInput.max = '100';
       progressInput.value = item.progress ?? 0;
-      progressInput.addEventListener('input', () => {
-        item.progress = Number(progressInput.value);
-        renderWorkItems();
-        scheduleSaveDraft();
-      });
       progressField.appendChild(progressInput);
 
       const removeField = document.createElement('div');
@@ -313,26 +314,37 @@ function renderWorkReportView(container) {
       row.appendChild(titleField);
       row.appendChild(progressField);
       row.appendChild(removeField);
-      workItemsList.appendChild(row);
 
-      if (decreased) {
-        const reasonField = document.createElement('div');
-        reasonField.className = 'field';
-        reasonField.style.marginBottom = '8px';
-        reasonField.innerHTML = '<label class="field-label" style="color: var(--color-danger, #d9534f);">진행률 감소 사유 :</label>';
-        const reasonInput = document.createElement('input');
-        reasonInput.type = 'text';
-        reasonInput.value = item.decreaseReason || '';
-        reasonInput.placeholder = '진행률이 줄어든 이유를 입력해주세요 (필수)';
-        reasonInput.addEventListener('input', () => {
-          item.decreaseReason = reasonInput.value;
-          scheduleSaveDraft();
-        });
-        reasonField.appendChild(reasonInput);
-        workItemsList.appendChild(reasonField);
-      } else if (item.decreaseReason) {
-        item.decreaseReason = '';
-      }
+      const reasonRow = document.createElement('div');
+      reasonRow.className = 'field';
+      reasonRow.style.marginBottom = '8px';
+      reasonRow.innerHTML = '<label class="field-label" style="color: var(--color-danger, #d9534f);">진행률 감소 사유 :</label>';
+      const reasonInput = document.createElement('input');
+      reasonInput.type = 'text';
+      reasonInput.value = item.decreaseReason || '';
+      reasonInput.placeholder = '진행률이 줄어든 이유를 입력해주세요 (필수)';
+      reasonRow.appendChild(reasonInput);
+
+      const els = { progressLabel, reasonRow, reasonInput };
+
+      titleInput.addEventListener('input', () => {
+        item.title = titleInput.value;
+        refreshRowDerivedState(item, els);
+        scheduleSaveDraft();
+      });
+      progressInput.addEventListener('input', () => {
+        item.progress = Number(progressInput.value);
+        refreshRowDerivedState(item, els);
+        scheduleSaveDraft();
+      });
+      reasonInput.addEventListener('input', () => {
+        item.decreaseReason = reasonInput.value;
+        scheduleSaveDraft();
+      });
+
+      workItemsList.appendChild(row);
+      workItemsList.appendChild(reasonRow);
+      refreshRowDerivedState(item, els);
     });
   }
 
