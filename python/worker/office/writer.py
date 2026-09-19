@@ -7,8 +7,10 @@
   weekly_plan|daily_work|daily_plan}_report"]
 - 특이사항: textarea[name="issues"]
 - 첨부파일: input[name="upload_files[]"]
-- 제출 버튼: #btnSubmit (평범한 폼 제출 버튼으로 보임 — type이 없으면
-  <button>의 기본 type은 submit이라 클릭하면 그대로 폼이 제출된다)
+- 제출 버튼: #btnSubmit — 실제로 눌러보니 평범한 폼 제출이 아니라, 클릭 시
+  "입력하신 내용으로 업무보고를 하시겠습니까?" 확인창(confirm)이 뜨고,
+  확인을 눌러야 실제 등록이 진행되는 커스텀 JS 핸들러가 붙어있다. 등록 후
+  결과를 알리는 두 번째 알림창이 뜰 수도 있어 아래에서 순서대로 처리한다.
 
 Summernote는 화면에 보이는 편집 영역(.note-editable)과 실제 전송되는
 <textarea>를 동기화해주는데, 그 동기화가 정확히 언제 일어나는지(값 변경
@@ -91,12 +93,27 @@ def fill_and_submit(driver, report_data: dict, report_date: str | None, file_pat
         result["error"] = f"'글쓰기' 버튼을 클릭하지 못했습니다: {exc}"
         return result
 
-    alert_text = _wait_for_alert(driver)
-    if alert_text is not None:
-        result["alertText"] = alert_text
-        result["error"] = f"제출 중 알림창: {alert_text}"
-        emit_log(f"제출 중 알림창이 떴습니다: {alert_text}", level="error")
-        return result
+    # "글쓰기"를 누르면 "입력하신 내용으로 업무보고를 하시겠습니까?" 같은 확인창이
+    # 먼저 뜨고, 확인을 누른 뒤에야 실제 등록이 진행되며 그 결과(성공/실패)를
+    # 알리는 두 번째 알림창이 뜰 수 있다. 그래서 알림창이 뜨는 대로 계속
+    # 확인을 누르면서(최대 3번) 마지막 알림창의 내용으로 성공/실패를 판단한다.
+    alert_texts: list[str] = []
+    for i in range(3):
+        text = _wait_for_alert(driver, timeout=4 if i == 0 else 6)
+        if text is None:
+            break
+        alert_texts.append(text)
+        if _is_confirm_prompt(text):
+            emit_log(f"확인창이 떠서 확인을 눌렀습니다: {text}")
+        else:
+            emit_log(f"결과 알림창: {text}")
+            break  # 질문이 아니라 결과 메시지로 보이므로 더 기다리지 않는다
+
+    if alert_texts:
+        result["alertText"] = alert_texts[-1]
+        if _looks_like_failure(alert_texts[-1]):
+            result["error"] = f"제출 실패 알림: {alert_texts[-1]}"
+            return result
 
     time.sleep(2)  # 리다이렉트/렌더링 대기
 
@@ -156,6 +173,18 @@ def _attach_files(driver, file_paths: list[str]) -> None:
         return
     file_input.send_keys("\n".join(file_paths))
     emit_log(f"첨부파일 {len(file_paths)}개를 선택했습니다.")
+
+
+CONFIRM_MARKERS = ("하시겠습니까", "하시겠어요", "할까요", "하시겠어", "하겠습니까")
+FAILURE_MARKERS = ("실패", "오류", "에러", "다시 입력", "선택해", "입력해주세요", "필요합니다")
+
+
+def _is_confirm_prompt(text: str) -> bool:
+    return any(marker in text for marker in CONFIRM_MARKERS)
+
+
+def _looks_like_failure(text: str) -> bool:
+    return any(marker in text for marker in FAILURE_MARKERS)
 
 
 def _wait_for_alert(driver, timeout: float = 4) -> str | None:
