@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
   // 설정 (electron-store)
@@ -43,4 +43,11 @@ contextBridge.exposeInMainWorld('api', {
 
   // 업무보고: 오늘 커밋 내역 불러오기
   getTodayCommits: () => ipcRenderer.invoke('report:getTodayCommits'),
+
+  // 업무보고: office.talkstation.co.kr 크롤링 결과(JSON) 읽기
+  getOfficeReports: () => ipcRenderer.invoke('report:getOfficeReports'),
+
+  // 업무보고: <input type="file">로 고른 파일의 실제 경로 (Electron 32+에서는
+  // File.path가 제거되어 webUtils.getPathForFile로만 얻을 수 있다).
+  getPathForFile: (file) => webUtils.getPathForFile(file),
 });

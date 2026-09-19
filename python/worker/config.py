@@ -21,6 +21,13 @@ LMS_PASSWORD = os.getenv("LMS_PASSWORD", "")
 # TODO: 실제 LMS 관리자 페이지 로그인 URL이 확정되면 .env에 채워넣기
 LMS_BASE_URL = os.getenv("LMS_BASE_URL", "")
 
+# office.talkstation.co.kr(사내 업무보고 시스템) 자동화. 로그인 계정은 사용자가
+# LMS와 같은 것을 쓰기로 해서 별도 입력 없이 LMS_ID/LMS_PASSWORD를 재사용하되,
+# Electron이 넘겨주는 환경변수로 OFFICE_ID/OFFICE_PASSWORD가 오면 그걸 우선한다.
+OFFICE_ID = os.getenv("OFFICE_ID", "") or LMS_ID
+OFFICE_PASSWORD = os.getenv("OFFICE_PASSWORD", "") or LMS_PASSWORD
+OFFICE_BASE_URL = os.getenv("OFFICE_BASE_URL", "https://office.talkstation.co.kr")
+
 GOOGLE_SHEETS_CREDENTIALS_PATH = os.getenv("GOOGLE_SHEETS_CREDENTIALS_PATH", "")
 GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID", "")
 

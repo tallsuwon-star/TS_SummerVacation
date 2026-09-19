@@ -1,13 +1,19 @@
-// 업무보고(office.talkstation.co.kr의 "일일업무보고 작성"과 비슷한 화면) 초안 작성 도구.
+// 업무보고(office.talkstation.co.kr "일일업무보고 작성") 화면.
 //
-// office.talkstation.co.kr에 직접 자동 로그인/제출하지는 않는다(사내망 전용
-// 사이트라 여기서 직접 테스트해볼 수 없어서 위험 부담이 큼) — 대신 이 화면에서
-// 초안을 만들고 다듬은 뒤 "보고서 초안 복사"로 클립보드에 담아 실제 사이트
-// 글쓰기 화면에 붙여넣는 방식으로 쓴다.
+// 세 부분으로 구성된다.
+// 1) 초안 작성 - 일일/주간 탭 + 업무 항목별 진행률(%) 입력. 아직은 로컬에만
+//    저장되고, "보고서 초안 복사"로 클립보드에 담아 수동으로 붙여넣을 수도 있다.
+// 2) 크롤링 - office.talkstation.co.kr에서 지정한 이름으로 검색되는 과거
+//    보고서를 1회성으로 모두 가져와 data/office/reports.json에 저장한다
+//    (python/worker/office/crawler.py).
+// 3) 자동 제출 - 크롤링해둔 가장 최근 보고서의 7개 항목을 그대로
+//    /report/write에 채우되, "금일 업무 내용"/"특이사항"은 위 초안(진행률 %
+//    포함)이 있으면 그걸 우선 사용해서 실제로 로그인 -> 채움 -> "글쓰기"까지
+//    자동으로 수행한다(python/worker/office/writer.py). 오류나 alert가 뜨면
+//    실행 로그에 그대로 표시된다.
 //
 // "오늘 한 일" 초안은 대화 내용이 아니라(일렉트론 앱은 이 대화를 알 수 없음)
 // 이 저장소(TS_SummerVacation)의 오늘자 git 커밋 메시지를 불러와서 만든다.
-// 실시간 연동은 안 되니, "새로고침" 버튼을 눌러야 그 시점까지의 커밋을 반영한다.
 function renderWorkReportView(container) {
   container.innerHTML = `
     <div class="view-header">
@@ -15,11 +21,6 @@ function renderWorkReportView(container) {
       <div class="job-controls">
         <button id="report-copy-btn" class="btn btn-primary">보고서 초안 복사</button>
       </div>
-    </div>
-
-    <div class="field-hint" style="margin-bottom: 16px;">
-      office.talkstation.co.kr에 자동으로 올라가지는 않습니다. 여기서 초안을 만들고 다듬은 뒤,
-      "보고서 초안 복사"를 눌러 실제 사이트의 "일일업무보고 작성" 화면에 붙여넣어 주세요.
     </div>
 
     <section class="panel">
@@ -40,6 +41,13 @@ function renderWorkReportView(container) {
     </section>
 
     <section class="panel">
+      <div class="log-toolbar">
+        <button id="mode-daily-btn" class="btn btn-primary" data-mode="daily">일일보고서 작성</button>
+        <button id="mode-weekly-btn" class="btn btn-ghost" data-mode="weekly">주간보고서 작성</button>
+      </div>
+    </section>
+
+    <section class="panel">
       <div class="field-label login-test-label">오늘 깃 커밋 내역</div>
       <div class="log-toolbar">
         <button id="refresh-commits-btn" class="btn btn-ghost">🔄 새로고침</button>
@@ -50,17 +58,34 @@ function renderWorkReportView(container) {
       </div>
     </section>
 
-    <section class="panel">
+    <section class="panel" id="daily-mode-section">
       <div class="field">
         <label class="field-label" for="daily-work">금일 업무 내용</label>
-        <textarea id="daily-work" rows="8" placeholder="오늘 한 일을 정리해주세요. 위 커밋 내역을 채워 넣은 뒤 자유롭게 다듬을 수 있습니다."></textarea>
+        <textarea id="daily-work" rows="6" placeholder="오늘 한 일을 정리해주세요. 위 커밋 내역을 채워 넣은 뒤 자유롭게 다듬을 수 있습니다."></textarea>
+      </div>
+
+      <div class="field-label" style="margin-top: 12px;">업무별 진행률</div>
+      <div class="field-hint" style="margin-top: 0;">
+        업무 항목마다 진행률(%)을 입력하면 제출 시 "금일 업무 내용"에 자동으로 반영됩니다.
+        전날 같은 이름의 업무보다 진행률이 낮아지면 "진행률 감소 사유"를 반드시 입력해야 합니다.
+      </div>
+      <div id="work-items-list"></div>
+      <button id="add-work-item-btn" class="btn btn-ghost" style="margin-top: 8px;">+ 업무 추가</button>
+
+      <div class="field" style="margin-top: 16px;">
+        <label class="field-label" for="tomorrow-plan">명일 업무 계획</label>
+        <textarea id="tomorrow-plan" rows="4"></textarea>
       </div>
     </section>
 
-    <section class="panel">
+    <section class="panel" id="weekly-mode-section" hidden>
       <div class="field">
-        <label class="field-label" for="tomorrow-plan">명일 업무 계획</label>
-        <textarea id="tomorrow-plan" rows="4"></textarea>
+        <label class="field-label" for="weekly-work">지난주 내용</label>
+        <textarea id="weekly-work" rows="6"></textarea>
+      </div>
+      <div class="field">
+        <label class="field-label" for="weekly-plan">다음주 계획</label>
+        <textarea id="weekly-plan" rows="6"></textarea>
       </div>
     </section>
 
@@ -69,6 +94,53 @@ function renderWorkReportView(container) {
         <label class="field-label" for="report-issues">특이사항</label>
         <textarea id="report-issues" rows="3"></textarea>
       </div>
+    </section>
+
+    <section class="panel">
+      <div class="field-label login-test-label">① office.talkstation.co.kr 크롤링 (1회성)</div>
+      <div class="field-hint" style="margin-top: 0;">
+        지정한 이름으로 검색되는 모든 일일업무보고를 가져와 저장합니다. 새 보고서를 자동 제출할 때
+        이 중 가장 최근 날짜의 항목을 기본값으로 사용합니다.
+      </div>
+      <div class="criteria-panel">
+        <div class="field">
+          <label class="field-label" for="office-target-name">검색할 이름</label>
+          <input type="text" id="office-target-name" placeholder="예: 황병권" />
+        </div>
+      </div>
+      <div class="log-toolbar">
+        <button id="crawl-btn" class="btn btn-primary">크롤링 시작</button>
+      </div>
+      <div id="crawl-status" class="field-hint" style="margin-top: 8px;">아직 크롤링한 적이 없습니다.</div>
+    </section>
+
+    <section class="panel">
+      <div class="field-label login-test-label">② 자동으로 채워서 제출 ("글쓰기")</div>
+      <div class="field-hint" style="margin-top: 0;">
+        위 날짜로 /report/write를 열어 크롤링 데이터(지난달/이번달 계획, 지난주/다음주, 명일 계획)와
+        아래 체크박스에 따라 이 화면의 초안(금일 업무 내용/특이사항)을 채운 뒤 "글쓰기"를 자동으로 누릅니다.
+      </div>
+      <div class="field" style="flex-direction: row; align-items: center; gap: 8px;">
+        <input type="checkbox" id="use-local-draft-checkbox" checked />
+        <label for="use-local-draft-checkbox">금일 업무 내용/특이사항은 이 화면에서 작성한 내용을 사용</label>
+      </div>
+      <div class="field">
+        <label class="field-label" for="attach-files-input">첨부파일 (선택)</label>
+        <input type="file" id="attach-files-input" multiple />
+      </div>
+      <div class="log-toolbar">
+        <button id="submit-btn" class="btn btn-primary">자동 제출</button>
+      </div>
+      <div id="submit-result" class="field-hint" style="margin-top: 8px;"></div>
+    </section>
+
+    <section class="panel">
+      <div class="field-label login-test-label">실행 로그</div>
+      <div class="log-toolbar">
+        <input type="text" id="job-log-search" class="roster-search-input" placeholder="로그 검색... (일치하는 줄만 표시)" />
+        <span id="job-log-search-count" class="tutor-roster-count"></span>
+      </div>
+      <div id="job-log-output" class="log-output"></div>
     </section>
   `;
 
@@ -80,11 +152,32 @@ function renderWorkReportView(container) {
   const commitsOutput = document.getElementById('commits-output');
   const dailyWorkInput = document.getElementById('daily-work');
   const tomorrowPlanInput = document.getElementById('tomorrow-plan');
+  const weeklyWorkInput = document.getElementById('weekly-work');
+  const weeklyPlanInput = document.getElementById('weekly-plan');
   const issuesInput = document.getElementById('report-issues');
   const copyBtn = document.getElementById('report-copy-btn');
+  const modeDailyBtn = document.getElementById('mode-daily-btn');
+  const modeWeeklyBtn = document.getElementById('mode-weekly-btn');
+  const dailyModeSection = document.getElementById('daily-mode-section');
+  const weeklyModeSection = document.getElementById('weekly-mode-section');
+  const workItemsList = document.getElementById('work-items-list');
+  const addWorkItemBtn = document.getElementById('add-work-item-btn');
+  const officeTargetNameInput = document.getElementById('office-target-name');
+  const crawlBtn = document.getElementById('crawl-btn');
+  const crawlStatus = document.getElementById('crawl-status');
+  const useLocalDraftCheckbox = document.getElementById('use-local-draft-checkbox');
+  const attachFilesInput = document.getElementById('attach-files-input');
+  const submitBtn = document.getElementById('submit-btn');
+  const submitResult = document.getElementById('submit-result');
+  const jobLogOutput = document.getElementById('job-log-output');
+  const jobLogSearchInput = document.getElementById('job-log-search');
+  const jobLogSearchCount = document.getElementById('job-log-search-count');
 
   let fetchedCommits = [];
   let settings = null;
+  let mode = 'daily'; // 'daily' | 'weekly' — UI 표시 전환용, 데이터는 둘 다 항상 함께 저장
+  let workItems = []; // [{ title, progress, decreaseReason }]
+  let activeJobKind = null; // 'crawl' | 'submit'
 
   function todayIso() {
     const d = new Date();
@@ -92,16 +185,36 @@ function renderWorkReportView(container) {
     return d.toISOString().slice(0, 10);
   }
 
+  function previousIso(iso) {
+    const d = new Date(`${iso}T00:00:00`);
+    d.setDate(d.getDate() - 1);
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 10);
+  }
+
+  function emptyDraft() {
+    return { dailyWork: '', tomorrowPlan: '', issues: '', weeklyWork: '', weeklyPlan: '', workItems: [] };
+  }
+
   function currentDraft() {
     const drafts = settings.workReportDrafts || {};
-    return drafts[dateInput.value] || { dailyWork: '', tomorrowPlan: '', issues: '' };
+    return drafts[dateInput.value] || emptyDraft();
+  }
+
+  function previousDraft() {
+    const drafts = settings.workReportDrafts || {};
+    return drafts[previousIso(dateInput.value)] || emptyDraft();
   }
 
   function loadDraftForDate() {
     const draft = currentDraft();
     dailyWorkInput.value = draft.dailyWork || '';
     tomorrowPlanInput.value = draft.tomorrowPlan || '';
+    weeklyWorkInput.value = draft.weeklyWork || '';
+    weeklyPlanInput.value = draft.weeklyPlan || '';
     issuesInput.value = draft.issues || '';
+    workItems = (draft.workItems || []).map((item) => ({ ...item }));
+    renderWorkItems();
     fetchedCommits = [];
     applyCommitsBtn.disabled = true;
     commitsOutput.innerHTML = '<div class="empty-view">새로고침을 눌러 오늘 이 저장소에 커밋한 내역을 불러오세요.</div>';
@@ -112,7 +225,10 @@ function renderWorkReportView(container) {
     drafts[dateInput.value] = {
       dailyWork: dailyWorkInput.value,
       tomorrowPlan: tomorrowPlanInput.value,
+      weeklyWork: weeklyWorkInput.value,
+      weeklyPlan: weeklyPlanInput.value,
       issues: issuesInput.value,
+      workItems,
     };
     settings.workReportDrafts = drafts;
     await window.api.setSettings({ workReportDrafts: drafts });
@@ -124,13 +240,159 @@ function renderWorkReportView(container) {
     await window.api.setSettings({ reportProfile: profile });
   }
 
+  function setMode(nextMode) {
+    mode = nextMode;
+    const isDaily = mode === 'daily';
+    dailyModeSection.hidden = !isDaily;
+    weeklyModeSection.hidden = isDaily;
+    modeDailyBtn.className = isDaily ? 'btn btn-primary' : 'btn btn-ghost';
+    modeWeeklyBtn.className = isDaily ? 'btn btn-ghost' : 'btn btn-primary';
+  }
+
+  // ---- 업무별 진행률(%) ----
+  function findPreviousItem(title) {
+    const prev = previousDraft();
+    return (prev.workItems || []).find((item) => (item.title || '').trim() === title.trim());
+  }
+
+  function renderWorkItems() {
+    workItemsList.innerHTML = '';
+    workItems.forEach((item, index) => {
+      const prevItem = item.title ? findPreviousItem(item.title) : null;
+      const decreased = prevItem && Number(item.progress) < Number(prevItem.progress);
+
+      const row = document.createElement('div');
+      row.className = 'criteria-panel';
+      row.style.marginBottom = '8px';
+
+      const titleField = document.createElement('div');
+      titleField.className = 'field';
+      titleField.innerHTML = '<label class="field-label">업무명</label>';
+      const titleInput = document.createElement('input');
+      titleInput.type = 'text';
+      titleInput.value = item.title || '';
+      titleInput.placeholder = '예: 업무보고 자동화 개발';
+      titleInput.addEventListener('input', () => {
+        item.title = titleInput.value;
+        renderWorkItems();
+        scheduleSaveDraft();
+      });
+      titleField.appendChild(titleInput);
+
+      const progressField = document.createElement('div');
+      progressField.className = 'field';
+      const progressLabel = document.createElement('label');
+      progressLabel.className = 'field-label';
+      progressLabel.textContent = prevItem ? `진행률 % (전날 ${prevItem.progress}%)` : '진행률 %';
+      progressField.appendChild(progressLabel);
+      const progressInput = document.createElement('input');
+      progressInput.type = 'number';
+      progressInput.min = '0';
+      progressInput.max = '100';
+      progressInput.value = item.progress ?? 0;
+      progressInput.addEventListener('input', () => {
+        item.progress = Number(progressInput.value);
+        renderWorkItems();
+        scheduleSaveDraft();
+      });
+      progressField.appendChild(progressInput);
+
+      const removeField = document.createElement('div');
+      removeField.className = 'field';
+      removeField.innerHTML = '<label class="field-label">&nbsp;</label>';
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'btn btn-ghost';
+      removeBtn.textContent = '삭제';
+      removeBtn.addEventListener('click', () => {
+        workItems.splice(index, 1);
+        renderWorkItems();
+        saveDraft();
+      });
+      removeField.appendChild(removeBtn);
+
+      row.appendChild(titleField);
+      row.appendChild(progressField);
+      row.appendChild(removeField);
+      workItemsList.appendChild(row);
+
+      if (decreased) {
+        const reasonField = document.createElement('div');
+        reasonField.className = 'field';
+        reasonField.style.marginBottom = '8px';
+        reasonField.innerHTML = '<label class="field-label" style="color: var(--color-danger, #d9534f);">진행률 감소 사유 :</label>';
+        const reasonInput = document.createElement('input');
+        reasonInput.type = 'text';
+        reasonInput.value = item.decreaseReason || '';
+        reasonInput.placeholder = '진행률이 줄어든 이유를 입력해주세요 (필수)';
+        reasonInput.addEventListener('input', () => {
+          item.decreaseReason = reasonInput.value;
+          scheduleSaveDraft();
+        });
+        reasonField.appendChild(reasonInput);
+        workItemsList.appendChild(reasonField);
+      } else if (item.decreaseReason) {
+        item.decreaseReason = '';
+      }
+    });
+  }
+
+  function hasBlockingDecreaseReasons() {
+    return workItems.some((item) => {
+      const prevItem = item.title ? findPreviousItem(item.title) : null;
+      const decreased = prevItem && Number(item.progress) < Number(prevItem.progress);
+      return decreased && !(item.decreaseReason || '').trim();
+    });
+  }
+
+  // 금일 업무 내용에 진행률 항목을 반영한 HTML (자동 제출 시 daily_work_report로 사용).
+  function buildDailyWorkHtml() {
+    const parts = [];
+    if (dailyWorkInput.value.trim()) {
+      const escaped = dailyWorkInput.value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .split('\n')
+        .join('<br>');
+      parts.push(`<p>${escaped}</p>`);
+    }
+    if (workItems.length > 0) {
+      const items = workItems
+        .filter((item) => (item.title || '').trim())
+        .map((item) => {
+          let line = `<b>${item.title}</b>: ${item.progress ?? 0}% 진행`;
+          if (item.decreaseReason && item.decreaseReason.trim()) {
+            line += ` (진행률 감소 사유 : ${item.decreaseReason})`;
+          }
+          return `<li>${line}</li>`;
+        })
+        .join('');
+      if (items) parts.push(`<ul>${items}</ul>`);
+    }
+    return parts.join('');
+  }
+
+  function buildIssuesHtml() {
+    if (!issuesInput.value.trim()) return '';
+    const escaped = issuesInput.value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .split('\n')
+      .join('<br>');
+    return `<p>${escaped}</p>`;
+  }
+
   async function init() {
     settings = await window.api.getSettings();
     const profile = settings.reportProfile || {};
     departmentInput.value = profile.department || '';
     authorInput.value = profile.author || '';
+    officeTargetNameInput.value = settings.officeReportTargetName || '';
     dateInput.value = todayIso();
+    setMode('daily');
     loadDraftForDate();
+    await refreshCrawlStatus();
   }
 
   // 입력할 때마다 바로 저장하면 매 키 입력마다 electron-store에 디스크 쓰기가
@@ -144,8 +406,17 @@ function renderWorkReportView(container) {
   dateInput.addEventListener('change', loadDraftForDate);
   departmentInput.addEventListener('change', saveProfile);
   authorInput.addEventListener('change', saveProfile);
-  [dailyWorkInput, tomorrowPlanInput, issuesInput].forEach((el) => {
+  [dailyWorkInput, tomorrowPlanInput, weeklyWorkInput, weeklyPlanInput, issuesInput].forEach((el) => {
     el.addEventListener('input', scheduleSaveDraft);
+  });
+
+  modeDailyBtn.addEventListener('click', () => setMode('daily'));
+  modeWeeklyBtn.addEventListener('click', () => setMode('weekly'));
+
+  addWorkItemBtn.addEventListener('click', () => {
+    workItems.push({ title: '', progress: 0, decreaseReason: '' });
+    renderWorkItems();
+    saveDraft();
   });
 
   refreshCommitsBtn.addEventListener('click', async () => {
@@ -190,26 +461,178 @@ function renderWorkReportView(container) {
   });
 
   copyBtn.addEventListener('click', async () => {
-    const text = [
-      `[일일업무보고 - ${dateInput.value}]`,
-      `부서: ${departmentInput.value}`,
-      `작성자: ${authorInput.value}`,
-      '',
-      '<금일 업무 내용>',
-      dailyWorkInput.value || '(내용 없음)',
-      '',
-      '<명일 업무 계획>',
-      tomorrowPlanInput.value || '(내용 없음)',
-      '',
-      '<특이사항>',
-      issuesInput.value || '(내용 없음)',
-    ].join('\n');
+    const text =
+      mode === 'daily'
+        ? [
+            `[일일업무보고 - ${dateInput.value}]`,
+            `부서: ${departmentInput.value}`,
+            `작성자: ${authorInput.value}`,
+            '',
+            '<금일 업무 내용>',
+            dailyWorkInput.value || '(내용 없음)',
+            ...(workItems.length
+              ? ['', '<업무별 진행률>', ...workItems.map((i) => `- ${i.title}: ${i.progress}%${i.decreaseReason ? ` (진행률 감소 사유: ${i.decreaseReason})` : ''}`)]
+              : []),
+            '',
+            '<명일 업무 계획>',
+            tomorrowPlanInput.value || '(내용 없음)',
+            '',
+            '<특이사항>',
+            issuesInput.value || '(내용 없음)',
+          ].join('\n')
+        : [
+            `[주간업무보고 - ${dateInput.value}]`,
+            `부서: ${departmentInput.value}`,
+            `작성자: ${authorInput.value}`,
+            '',
+            '<지난주 내용>',
+            weeklyWorkInput.value || '(내용 없음)',
+            '',
+            '<다음주 계획>',
+            weeklyPlanInput.value || '(내용 없음)',
+            '',
+            '<특이사항>',
+            issuesInput.value || '(내용 없음)',
+          ].join('\n');
 
     const result = await window.api.copySummary(text);
     copyBtn.textContent = result.success ? '복사됨!' : '복사 실패';
     setTimeout(() => {
       copyBtn.textContent = '보고서 초안 복사';
     }, 1500);
+  });
+
+  // ---- 실행 로그 (크롤링/자동 제출 공용, 검색 필터 포함) ----
+  let jobLogSearchQuery = '';
+
+  function applyJobLogLineVisibility(line) {
+    const matches = !jobLogSearchQuery || line.textContent.toLowerCase().includes(jobLogSearchQuery);
+    line.hidden = !matches;
+  }
+
+  function updateJobLogSearchCount() {
+    if (!jobLogSearchQuery) {
+      jobLogSearchCount.textContent = '';
+      return;
+    }
+    const total = jobLogOutput.children.length;
+    const shown = jobLogOutput.querySelectorAll('.log-line:not([hidden])').length;
+    jobLogSearchCount.textContent = `${shown} / ${total}줄 일치`;
+  }
+
+  jobLogSearchInput.addEventListener('input', () => {
+    jobLogSearchQuery = jobLogSearchInput.value.trim().toLowerCase();
+    Array.from(jobLogOutput.children).forEach(applyJobLogLineVisibility);
+    updateJobLogSearchCount();
+  });
+
+  function appendJobLog(level, message) {
+    const line = document.createElement('div');
+    line.className = `log-line log-line-${level}`;
+    line.textContent = message;
+    applyJobLogLineVisibility(line);
+    jobLogOutput.appendChild(line);
+    if (!line.hidden) {
+      jobLogOutput.scrollTop = jobLogOutput.scrollHeight;
+    }
+    updateJobLogSearchCount();
+  }
+
+  // ---- ① 크롤링 ----
+  async function refreshCrawlStatus() {
+    const data = await window.api.getOfficeReports();
+    if (!data || !data.reports || data.reports.length === 0) {
+      crawlStatus.textContent = '아직 크롤링한 적이 없습니다.';
+      return;
+    }
+    const latest = data.reports[0];
+    const crawledAt = data.crawledAt ? new Date(data.crawledAt * 1000).toLocaleString() : '알 수 없음';
+    crawlStatus.textContent = `'${data.targetName}' 기준 ${data.reports.length}건 저장됨 (마지막 크롤링: ${crawledAt}, 가장 최근 보고서: ${latest.report_date || '날짜 미상'})`;
+  }
+
+  crawlBtn.addEventListener('click', async () => {
+    const targetName = officeTargetNameInput.value.trim();
+    if (!targetName) {
+      alert('크롤링할 대상 이름을 입력해주세요.');
+      return;
+    }
+    settings.officeReportTargetName = targetName;
+    await window.api.setSettings({ officeReportTargetName: targetName });
+
+    jobLogOutput.innerHTML = '';
+    activeJobKind = 'crawl';
+    const result = await window.api.startJob({ jobId: 'office_report_crawl', targetName });
+    if (!result.started) {
+      alert('이미 실행 중인 작업이 있습니다.');
+      activeJobKind = null;
+      return;
+    }
+    crawlBtn.disabled = true;
+    submitBtn.disabled = true;
+  });
+
+  // ---- ② 자동 제출 ----
+  submitBtn.addEventListener('click', async () => {
+    if (hasBlockingDecreaseReasons()) {
+      alert('전날보다 진행률이 낮아진 업무가 있습니다. "진행률 감소 사유"를 먼저 입력해주세요.');
+      return;
+    }
+
+    jobLogOutput.innerHTML = '';
+    submitResult.textContent = '';
+    activeJobKind = 'submit';
+
+    const filePaths = Array.from(attachFilesInput.files || [])
+      .map((f) => window.api.getPathForFile(f))
+      .filter(Boolean);
+
+    const payload = {
+      jobId: 'office_report_submit',
+      reportDate: dateInput.value,
+      filePaths,
+    };
+    if (useLocalDraftCheckbox.checked) {
+      const dailyWorkHtml = buildDailyWorkHtml();
+      const issuesHtml = buildIssuesHtml();
+      if (dailyWorkHtml) payload.dailyWorkOverride = dailyWorkHtml;
+      if (issuesHtml) payload.issuesOverride = issuesHtml;
+    }
+
+    const result = await window.api.startJob(payload);
+    if (!result.started) {
+      alert('이미 실행 중인 작업이 있습니다.');
+      activeJobKind = null;
+      return;
+    }
+    crawlBtn.disabled = true;
+    submitBtn.disabled = true;
+  });
+
+  window.api.onJobLog((data) => {
+    appendJobLog(data.level || 'info', data.message || '');
+  });
+
+  window.api.onJobDone((data) => {
+    if (typeof data.code === 'undefined') {
+      // emit_done() 요약 정보
+      if (activeJobKind === 'crawl' && data.summary) {
+        refreshCrawlStatus();
+      } else if (activeJobKind === 'submit' && data.summary) {
+        const summary = data.summary;
+        if (summary.success) {
+          submitResult.textContent = `제출 완료. 이동한 화면: ${summary.finalUrl || ''}`;
+        } else {
+          const alertPart = summary.alertText ? ` / 알림창 내용: "${summary.alertText}"` : '';
+          submitResult.textContent = `제출 실패: ${summary.error || '알 수 없는 오류'}${alertPart}`;
+        }
+      }
+      return;
+    }
+
+    appendJobLog('info', `작업 프로세스 종료 (종료 코드: ${data.code})`);
+    crawlBtn.disabled = false;
+    submitBtn.disabled = false;
+    activeJobKind = null;
   });
 
   init();

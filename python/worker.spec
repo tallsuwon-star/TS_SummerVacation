@@ -28,6 +28,7 @@ hiddenimports = collect_submodules('selenium') + [
     'google.oauth2.service_account',
     'dotenv',
     'pyperclip',
+    'bs4',
 ]
 
 a = Analysis(

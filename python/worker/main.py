@@ -9,7 +9,16 @@ for _stream in (sys.stdin, sys.stdout, sys.stderr):
         _stream.reconfigure(encoding="utf-8")
 
 from .control import ControlState
-from .jobs import login_test, morning_special_stats, naver_store_report, overdue_report, tutor_search_test, vocaking_report
+from .jobs import (
+    login_test,
+    morning_special_stats,
+    naver_store_report,
+    office_report_crawl,
+    office_report_submit,
+    overdue_report,
+    tutor_search_test,
+    vocaking_report,
+)
 from .utils.progress import emit_log
 
 # 신규 작업(job) 추가 시 여기에 jobId -> run 함수를 등록한다.
@@ -20,6 +29,8 @@ JOBS = {
     "overdue_report": overdue_report.run,
     "vocaking_report": vocaking_report.run,
     "naver_store_report": naver_store_report.run,
+    "office_report_crawl": office_report_crawl.run,
+    "office_report_submit": office_report_submit.run,
 }
 
 

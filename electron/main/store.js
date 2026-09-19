@@ -24,7 +24,11 @@ const store = new Store({
       department: '',
       author: '',
     },
-    workReportDrafts: {}, // { 'YYYY-MM-DD': { dailyWork, tomorrowPlan, issues } }
+    // { 'YYYY-MM-DD': { dailyWork, tomorrowPlan, issues, weeklyWork, weeklyPlan,
+    //   workItems: [{ title, progress, decreaseReason }] } }
+    workReportDrafts: {},
+    // office.talkstation.co.kr에서 크롤링할 때 검색할 이름(마지막 입력값 기억).
+    officeReportTargetName: '',
   },
 });
 

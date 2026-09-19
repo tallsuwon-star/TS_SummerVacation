@@ -5,6 +5,7 @@ const setupCheck = require('./setupCheck');
 const pythonRunner = require('./pythonRunner');
 const clipboard = require('./clipboard');
 const gitLog = require('./gitLog');
+const officeReports = require('./officeReports');
 
 function registerIpcHandlers(mainWindow) {
   ipcMain.handle('settings:get', () => store.store);
@@ -26,6 +27,7 @@ function registerIpcHandlers(mainWindow) {
   ipcMain.handle('clipboard:copy', (_event, text) => clipboard.copy(text));
 
   ipcMain.handle('report:getTodayCommits', () => gitLog.getTodayCommits());
+  ipcMain.handle('report:getOfficeReports', () => officeReports.getLatestReports());
 }
 
 module.exports = registerIpcHandlers;
