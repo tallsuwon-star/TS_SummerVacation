@@ -29,6 +29,8 @@ const store = new Store({
     workReportDrafts: {},
     // office.talkstation.co.kr에서 크롤링할 때 검색할 이름(마지막 입력값 기억).
     officeReportTargetName: '',
+    // 업무보고 "정리하기"(Claude API로 메모 다듬기)에 쓰는 API 키.
+    anthropicApiKey: '',
   },
 });
 

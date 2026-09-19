@@ -48,6 +48,13 @@ function renderWorkReportView(container) {
     </section>
 
     <section class="panel">
+      <div class="field">
+        <label class="field-label" for="anthropic-api-key">Claude API 키 (메모 정리 기능에 사용)</label>
+        <input type="password" id="anthropic-api-key" placeholder="sk-ant-..." />
+      </div>
+    </section>
+
+    <section class="panel">
       <div class="field-label login-test-label">오늘 깃 커밋 내역</div>
       <div class="log-toolbar">
         <button id="refresh-commits-btn" class="btn btn-ghost">🔄 새로고침</button>
@@ -62,6 +69,10 @@ function renderWorkReportView(container) {
       <div class="field">
         <label class="field-label" for="daily-work">금일 업무 내용</label>
         <textarea id="daily-work" rows="6" placeholder="오늘 한 일을 정리해주세요. 위 커밋 내역을 채워 넣은 뒤 자유롭게 다듬을 수 있습니다."></textarea>
+      </div>
+      <div class="log-toolbar" style="margin-top: 8px;">
+        <button id="tidy-daily-work-btn" class="btn btn-ghost">🪄 정리하기</button>
+        <span id="tidy-daily-work-status" class="field-hint" style="margin-top: 0;"></span>
       </div>
 
       <div class="field-label" style="margin-top: 12px;">업무별 진행률</div>
@@ -152,6 +163,9 @@ function renderWorkReportView(container) {
   const departmentInput = document.getElementById('report-department');
   const authorInput = document.getElementById('report-author');
   const dateInput = document.getElementById('report-date');
+  const anthropicApiKeyInput = document.getElementById('anthropic-api-key');
+  const tidyDailyWorkBtn = document.getElementById('tidy-daily-work-btn');
+  const tidyDailyWorkStatus = document.getElementById('tidy-daily-work-status');
   const refreshCommitsBtn = document.getElementById('refresh-commits-btn');
   const applyCommitsBtn = document.getElementById('apply-commits-btn');
   const commitsOutput = document.getElementById('commits-output');
@@ -408,6 +422,7 @@ function renderWorkReportView(container) {
     departmentInput.value = profile.department || '';
     authorInput.value = profile.author || '';
     officeTargetNameInput.value = settings.officeReportTargetName || '';
+    anthropicApiKeyInput.value = settings.anthropicApiKey || '';
     dateInput.value = todayIso();
     setMode('daily');
     loadDraftForDate();
@@ -425,6 +440,32 @@ function renderWorkReportView(container) {
   dateInput.addEventListener('change', loadDraftForDate);
   departmentInput.addEventListener('change', saveProfile);
   authorInput.addEventListener('change', saveProfile);
+  anthropicApiKeyInput.addEventListener('change', async () => {
+    settings.anthropicApiKey = anthropicApiKeyInput.value.trim();
+    await window.api.setSettings({ anthropicApiKey: settings.anthropicApiKey });
+  });
+
+  tidyDailyWorkBtn.addEventListener('click', async () => {
+    if (!dailyWorkInput.value.trim()) {
+      tidyDailyWorkStatus.textContent = '정리할 내용이 없습니다.';
+      return;
+    }
+    tidyDailyWorkBtn.disabled = true;
+    tidyDailyWorkBtn.textContent = '정리 중...';
+    tidyDailyWorkStatus.textContent = '';
+
+    const result = await window.api.tidyText(dailyWorkInput.value);
+
+    tidyDailyWorkBtn.disabled = false;
+    tidyDailyWorkBtn.textContent = '🪄 정리하기';
+
+    if (!result.success) {
+      tidyDailyWorkStatus.textContent = result.error || '정리에 실패했습니다.';
+      return;
+    }
+    dailyWorkInput.value = result.text;
+    saveDraft();
+  });
   [dailyWorkInput, tomorrowPlanInput, weeklyWorkInput, weeklyPlanInput, issuesInput].forEach((el) => {
     el.addEventListener('input', scheduleSaveDraft);
   });

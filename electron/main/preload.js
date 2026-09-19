@@ -47,6 +47,9 @@ contextBridge.exposeInMainWorld('api', {
   // 업무보고: office.talkstation.co.kr 크롤링 결과(JSON) 읽기
   getOfficeReports: () => ipcRenderer.invoke('report:getOfficeReports'),
 
+  // 업무보고: Claude API로 메모 정리하기
+  tidyText: (rawText) => ipcRenderer.invoke('report:tidyText', rawText),
+
   // 업무보고: <input type="file">로 고른 파일의 실제 경로 (Electron 32+에서는
   // File.path가 제거되어 webUtils.getPathForFile로만 얻을 수 있다).
   getPathForFile: (file) => webUtils.getPathForFile(file),
