@@ -22,6 +22,14 @@ from bs4 import BeautifulSoup
 from .. import config
 from ..control import ControlState
 from ..utils.progress import emit_log
+from ._debug import save_debug_snapshot
+
+# 목록이 서버 렌더링 직후 바로 다 있지 않고 DataTables가 AJAX로 채우는
+# 방식일 수 있어서, 고정 대기 대신 "/report/view/" 링크가 나타날 때까지
+# 최대 이만큼 짧은 간격으로 반복 확인한다. 그래도 안 나타나면 결과가
+# 정말 0건이라고 본다.
+LIST_LOAD_POLL_SECONDS = 8
+LIST_LOAD_POLL_INTERVAL = 0.5
 
 REPORTS_FILENAME = "reports.json"
 MAX_LIST_PAGES = 50
@@ -72,15 +80,25 @@ def crawl_reports(driver, target_name: str, control: ControlState) -> list[dict]
             break
 
         url = build_list_url(target_name, page)
+        emit_log(f"목록 페이지 요청: {url}")
         driver.get(url)
-        time.sleep(config.REQUEST_DELAY_SECONDS)
+        _wait_for_list_to_settle(driver)
 
         soup = BeautifulSoup(driver.page_source, "html.parser")
         page_links = _extract_view_links(soup, driver.current_url)
 
         new_links = {u: d for u, d in page_links.items() if u not in view_links}
         if not new_links:
-            emit_log(f"{page}페이지에 새 항목이 없어 목록 조회를 종료합니다." if page > 1 else "검색 결과가 없습니다.")
+            if page == 1:
+                total_anchors = len(soup.find_all("a"))
+                has_table = soup.find("table") is not None
+                emit_log(
+                    f"검색 결과가 없습니다. (참고: 실제 도착한 화면 {driver.current_url}, "
+                    f"페이지 내 링크 총 {total_anchors}개, 표 존재 여부: {has_table})"
+                )
+                save_debug_snapshot(driver, f"no_results_{target_name}")
+            else:
+                emit_log(f"{page}페이지에 새 항목이 없어 목록 조회를 종료합니다.")
             break
 
         view_links.update(new_links)
@@ -106,6 +124,16 @@ def crawl_reports(driver, target_name: str, control: ControlState) -> list[dict]
 
     reports.sort(key=lambda r: (r.get("report_date") or "", r.get("report_id") or ""), reverse=True)
     return reports
+
+
+def _wait_for_list_to_settle(driver) -> None:
+    """DataTables가 서버 렌더링 대신 AJAX로 행을 채우는 방식일 수 있어,
+    "/report/view/" 링크가 나타나거나 최대 대기 시간이 지날 때까지 짧게 반복 확인한다."""
+    deadline = time.monotonic() + LIST_LOAD_POLL_SECONDS
+    while time.monotonic() < deadline:
+        if "/report/view/" in driver.page_source:
+            return
+        time.sleep(LIST_LOAD_POLL_INTERVAL)
 
 
 def _extract_view_links(soup: BeautifulSoup, base_url: str) -> dict[str, str]:

@@ -105,7 +105,7 @@ function renderWorkReportView(container) {
       <div class="criteria-panel">
         <div class="field">
           <label class="field-label" for="office-target-name">검색할 이름</label>
-          <input type="text" id="office-target-name" placeholder="예: 황병권" />
+          <input type="text" id="office-target-name" placeholder="검색할 이름을 입력하세요" />
         </div>
       </div>
       <div class="log-toolbar">
