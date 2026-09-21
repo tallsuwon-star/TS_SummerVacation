@@ -377,6 +377,43 @@ textarea {
   font-weight: 600;
 }
 
+/* 자동 제출 미리보기 - 실제 /report/write 화면과 비슷한 느낌으로, 항목별 라벨 + 내용 카드 */
+
+.preview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.preview-card {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.preview-card-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+
+.preview-card-body {
+  font-size: 13px;
+  line-height: 1.5;
+  min-height: 20px;
+  word-break: break-word;
+}
+
+.preview-card-body.preview-empty {
+  color: var(--text-muted);
+}
+
+.preview-card.preview-full {
+  grid-column: 1 / -1;
+}
+
 .log-toolbar {
   display: flex;
   align-items: center;

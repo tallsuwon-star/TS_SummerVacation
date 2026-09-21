@@ -145,6 +145,13 @@ function renderWorkReportView(container) {
           <input type="file" id="attach-files-input" multiple />
         </div>
       </div>
+
+      <div class="field-label" style="margin-top: 16px;">미리보기 — 실제로 이렇게 올라갑니다</div>
+      <div class="field-hint" style="margin-top: 0;" id="preview-empty-hint">
+        아직 크롤링한 데이터가 없습니다. 위 ①에서 먼저 크롤링을 실행해주세요.
+      </div>
+      <div class="preview-grid" id="submit-preview-grid" hidden></div>
+
       <div class="log-toolbar" style="margin-top: 12px;">
         <button id="submit-btn" class="btn btn-primary">자동 제출</button>
       </div>
@@ -191,6 +198,8 @@ function renderWorkReportView(container) {
   const useLocalDraftCheckbox = document.getElementById('use-local-draft-checkbox');
   const attachFilesInput = document.getElementById('attach-files-input');
   const submitBtn = document.getElementById('submit-btn');
+  const previewEmptyHint = document.getElementById('preview-empty-hint');
+  const submitPreviewGrid = document.getElementById('submit-preview-grid');
   const submitResult = document.getElementById('submit-result');
   const submitResultIcon = document.getElementById('submit-result-icon');
   const submitResultText = document.getElementById('submit-result-text');
@@ -203,6 +212,7 @@ function renderWorkReportView(container) {
   let mode = 'daily'; // 'daily' | 'weekly' — UI 표시 전환용, 데이터는 둘 다 항상 함께 저장
   let workItems = []; // [{ title, progress, decreaseReason }]
   let activeJobKind = null; // 'crawl' | 'submit'
+  let latestOfficeData = null; // window.api.getOfficeReports() 결과, 미리보기에 사용
 
   function todayIso() {
     const d = new Date();
@@ -243,9 +253,11 @@ function renderWorkReportView(container) {
     fetchedCommits = [];
     applyCommitsBtn.disabled = true;
     commitsOutput.innerHTML = '<div class="empty-view">새로고침을 눌러 오늘 이 저장소에 커밋한 내역을 불러오세요.</div>';
+    renderSubmitPreview();
   }
 
   async function saveDraft() {
+    renderSubmitPreview();
     const drafts = { ...(settings.workReportDrafts || {}) };
     drafts[dateInput.value] = {
       dailyWork: dailyWorkInput.value,
@@ -448,6 +460,7 @@ function renderWorkReportView(container) {
     settings.anthropicApiKey = anthropicApiKeyInput.value.trim();
     await window.api.setSettings({ anthropicApiKey: settings.anthropicApiKey });
   });
+  useLocalDraftCheckbox.addEventListener('change', renderSubmitPreview);
 
   tidyDailyWorkBtn.addEventListener('click', async () => {
     if (!dailyWorkInput.value.trim()) {
@@ -617,6 +630,9 @@ function renderWorkReportView(container) {
   // ---- ① 크롤링 ----
   async function refreshCrawlStatus() {
     const data = await window.api.getOfficeReports();
+    latestOfficeData = data;
+    renderSubmitPreview();
+
     if (!data || !data.reports || data.reports.length === 0) {
       crawlStatus.textContent = '아직 크롤링한 적이 없습니다.';
       return;
@@ -624,6 +640,62 @@ function renderWorkReportView(container) {
     const latest = data.reports[0];
     const crawledAt = data.crawledAt ? new Date(data.crawledAt * 1000).toLocaleString() : '알 수 없음';
     crawlStatus.textContent = `'${data.targetName}' 기준 ${data.reports.length}건 저장됨 (마지막 크롤링: ${crawledAt}, 가장 최근 보고서: ${latest.report_date || '날짜 미상'})`;
+  }
+
+  // ---- 자동 제출 미리보기 (실제 /report/write 화면과 같은 7개 항목) ----
+  const PREVIEW_FIELDS = [
+    { key: 'monthly_work', fallbackLabel: '지난달 계획' },
+    { key: 'monthly_plan', fallbackLabel: '이번달 계획' },
+    { key: 'weekly_work', fallbackLabel: '지난주 내용' },
+    { key: 'weekly_plan', fallbackLabel: '다음주 계획' },
+    { key: 'daily_plan', fallbackLabel: '명일 업무 계획' },
+  ];
+
+  function renderSubmitPreview() {
+    const latest = latestOfficeData && latestOfficeData.reports && latestOfficeData.reports[0];
+    if (!latest) {
+      submitPreviewGrid.hidden = true;
+      previewEmptyHint.hidden = false;
+      return;
+    }
+    previewEmptyHint.hidden = true;
+    submitPreviewGrid.hidden = false;
+    submitPreviewGrid.innerHTML = '';
+
+    PREVIEW_FIELDS.forEach(({ key, fallbackLabel }) => {
+      const label = latest[`${key}_label`] || fallbackLabel;
+      const html = latest[`${key}_report`] || '';
+      submitPreviewGrid.appendChild(buildPreviewCard(label, html, false));
+    });
+
+    const useLocal = useLocalDraftCheckbox.checked;
+    const dailyWorkHtml = useLocal ? buildDailyWorkHtml() : latest.daily_work_report || '';
+    const issuesHtml = useLocal ? buildIssuesHtml() : latest.issues || '';
+
+    submitPreviewGrid.appendChild(buildPreviewCard('금일 업무 내용', dailyWorkHtml, true));
+    submitPreviewGrid.appendChild(buildPreviewCard('특이사항', issuesHtml, true));
+  }
+
+  function buildPreviewCard(label, html, isFull) {
+    const card = document.createElement('div');
+    card.className = isFull ? 'preview-card preview-full' : 'preview-card';
+
+    const labelEl = document.createElement('div');
+    labelEl.className = 'preview-card-label';
+    labelEl.textContent = label;
+
+    const bodyEl = document.createElement('div');
+    bodyEl.className = 'preview-card-body';
+    if (html && html.trim()) {
+      bodyEl.innerHTML = html;
+    } else {
+      bodyEl.textContent = '(내용 없음)';
+      bodyEl.classList.add('preview-empty');
+    }
+
+    card.appendChild(labelEl);
+    card.appendChild(bodyEl);
+    return card;
   }
 
   crawlBtn.addEventListener('click', async () => {
