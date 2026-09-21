@@ -128,8 +128,12 @@ function renderWorkReportView(container) {
     <section class="panel">
       <div class="field-label login-test-label">② 자동으로 채워서 제출 ("글쓰기")</div>
       <div class="field-hint" style="margin-top: 0;">
-        위 날짜로 /report/write를 열어 크롤링 데이터(지난달/이번달 계획, 지난주/다음주, 명일 계획)와
-        아래 체크박스에 따라 이 화면의 초안(금일 업무 내용/특이사항)을 채운 뒤 "글쓰기"를 자동으로 누릅니다.
+        이 버튼을 누르면 실제 office.talkstation.co.kr에 자동으로 로그인해서, 새 일일업무보고를
+        만들고 등록(글쓰기)까지 전부 자동으로 처리합니다. 채워지는 내용은 이렇습니다:
+        <br>· 지난달 계획 / 이번달 계획 / 지난주 내용 / 다음주 계획 / 명일 업무 계획
+        → 크롤링해둔 가장 최근 보고서 내용을 그대로 가져와서 채웁니다.
+        <br>· 금일 업무 내용 / 특이사항 → 아래 체크박스가 켜져 있으면 지금 이 화면에 쓴 내용을,
+        꺼져 있으면 이것도 크롤링 데이터를 그대로 씁니다.
       </div>
       <div class="checkbox-row">
         <input type="checkbox" id="use-local-draft-checkbox" checked />
