@@ -308,49 +308,95 @@ function buildRefundPanel(container) {
   return { attachListeners };
 }
 
-// ---- 카드취소 탭 (이메일로 회원 검색 -> LMS 상담관리 화면 자동으로 열기) ----
+// ---- 카드취소 탭 (구글 시트 "카드 환불" 섹션 조회 -> 체크한 회원들의
+// LMS 상담관리 화면을 자동으로 열어 대조 확인) ----
 function buildCardCancelPanel(container) {
   container.innerHTML = `
+    <div class="view-header">
+      <div class="job-controls">
+        <button id="cc-fetch-btn" class="btn btn-primary">조회 시작</button>
+      </div>
+    </div>
+
     <section class="panel">
       <div class="field-label">
-        카드 전액취소 전, 구글 시트에 적힌 내용과 회원의 실제 상담관리 기록
-        (요청자 일치 여부, 영수증 첨부 여부, 처리 사유)이 서로 맞는지 눈으로
-        대조해야 합니다. 아래에 시트의 D열(회원 이메일/ID)을 입력하면 LMS에
-        로그인해서 해당 회원의 상담관리 화면까지 자동으로 열어줍니다.
+        구글 시트의 "카드 환불" 섹션에서 "처리유무" 칸이 주황색(#FF9900)으로
+        표시된 건만 가져와 아래 표로 보여줍니다. 카드 전액취소 전, 시트에
+        적힌 내용과 회원의 실제 상담관리 기록(요청자 일치 여부, 영수증 첨부
+        여부, 처리 사유)이 서로 맞는지 확인이 필요한 회원을 체크한 뒤
+        "선택한 회원 상담관리 열기"를 누르면 LMS에 로그인해서 각 회원의
+        상담관리 화면을 자동으로 열어줍니다.
       </div>
-      <div class="checkbox-row">
-        <label for="card-cancel-email">회원 이메일(ID)</label>
-        <input type="text" id="card-cancel-email" placeholder="예: xiaoguai@naver.com" />
+      <div class="log-toolbar">
+        <input type="text" id="cc-search" class="roster-search-input" placeholder="회원명/이메일 검색..." />
+        <span id="cc-search-count" class="tutor-roster-count"></span>
       </div>
+      <table class="dashboard-table" id="cc-table">
+        <thead>
+          <tr>
+            <th><input type="checkbox" id="cc-select-all" /></th>
+            <th>회원명</th>
+            <th>이메일</th>
+            <th>요청자</th>
+            <th>환불금액</th>
+            <th>사유</th>
+            <th>내용</th>
+          </tr>
+        </thead>
+        <tbody id="cc-table-body">
+          <tr><td colspan="7" class="empty">아직 조회하지 않았습니다.</td></tr>
+        </tbody>
+      </table>
       <div class="job-controls">
-        <button id="card-cancel-open-btn" class="btn btn-primary">상담관리 화면 열기</button>
-        <button id="card-cancel-stop-btn" class="btn btn-danger" disabled>확인 종료</button>
+        <button id="cc-open-consult-btn" class="btn btn-primary" disabled>선택한 회원 상담관리 열기</button>
+        <button id="cc-stop-btn" class="btn btn-danger" disabled>확인 종료</button>
       </div>
       <div class="field-label">
-        버튼을 누르면 크롬 창이 열리고 LMS 로그인 후 해당 회원의 상담관리
-        화면까지 자동으로 이동합니다. 확인이 끝나면 "확인 종료"를 눌러
-        브라우저를 닫아주세요.
+        누르면 크롬 창이 열리고 LMS 로그인 후 체크한 회원마다 새 창으로
+        상담관리 화면을 하나씩 열어줍니다. 확인이 다 끝나면 "확인 종료"를
+        눌러 브라우저를 닫아주세요.
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="field-label">직접 이메일로 확인</div>
+      <div class="checkbox-row">
+        <label for="cc-manual-email">회원 이메일(ID)</label>
+        <input type="text" id="cc-manual-email" placeholder="예: xiaoguai@naver.com" />
+      </div>
+      <div class="job-controls">
+        <button id="cc-manual-open-btn" class="btn btn-ghost">상담관리 화면 열기</button>
+      </div>
+      <div class="field-label">
+        위 표에 없는 회원을 이메일로 바로 확인하고 싶을 때 사용하세요.
       </div>
     </section>
 
     <section class="panel">
       <div class="field-label login-test-label">실행 로그</div>
       <div class="log-toolbar">
-        <input type="text" id="card-cancel-log-search" class="roster-search-input" placeholder="로그 검색... (일치하는 줄만 표시)" />
-        <span id="card-cancel-log-search-count" class="tutor-roster-count"></span>
+        <input type="text" id="cc-log-search" class="roster-search-input" placeholder="로그 검색... (일치하는 줄만 표시)" />
+        <span id="cc-log-search-count" class="tutor-roster-count"></span>
       </div>
-      <div id="card-cancel-log-output" class="log-output"></div>
+      <div id="cc-log-output" class="log-output"></div>
     </section>
   `;
 
-  const emailInput = container.querySelector('#card-cancel-email');
-  const openBtn = container.querySelector('#card-cancel-open-btn');
-  const stopBtn = container.querySelector('#card-cancel-stop-btn');
+  const fetchBtn = container.querySelector('#cc-fetch-btn');
+  const searchInput = container.querySelector('#cc-search');
+  const searchCount = container.querySelector('#cc-search-count');
+  const tableBody = container.querySelector('#cc-table-body');
+  const selectAllCheckbox = container.querySelector('#cc-select-all');
+  const openConsultBtn = container.querySelector('#cc-open-consult-btn');
+  const stopBtn = container.querySelector('#cc-stop-btn');
+  const manualEmailInput = container.querySelector('#cc-manual-email');
+  const manualOpenBtn = container.querySelector('#cc-manual-open-btn');
 
-  const logOutput = container.querySelector('#card-cancel-log-output');
-  const logSearchInput = container.querySelector('#card-cancel-log-search');
-  const logSearchCount = container.querySelector('#card-cancel-log-search-count');
+  const logOutput = container.querySelector('#cc-log-output');
+  const logSearchInput = container.querySelector('#cc-log-search');
+  const logSearchCount = container.querySelector('#cc-log-search-count');
 
+  // ---- 실행 로그 (검색 필터) ----
   let logSearchQuery = '';
 
   function applyLogLineVisibility(line) {
@@ -386,23 +432,135 @@ function buildCardCancelPanel(container) {
     updateLogSearchCount();
   }
 
-  openBtn.addEventListener('click', async () => {
-    const memberEmail = emailInput.value.trim();
-    if (!memberEmail) {
-      alert('회원 이메일(ID)을 입력해주세요.');
+  function escapeHtml(text) {
+    if (!text) return '';
+    return String(text)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // ---- 카드취소 대상 표 (체크박스 + 검색 필터) ----
+  let cardCancels = []; // { memberName, memberEmail, requester, refundAmount, reasonType, detail }
+  let checkedEmails = new Set();
+  let searchQuery = '';
+
+  function updateActionButtonsState() {
+    openConsultBtn.disabled = checkedEmails.size === 0;
+  }
+
+  function renderTable() {
+    const query = searchQuery;
+    const filtered = cardCancels.filter((c) => {
+      if (!query) return true;
+      return `${c.memberName} ${c.memberEmail}`.toLowerCase().includes(query);
+    });
+
+    if (cardCancels.length === 0) {
+      tableBody.innerHTML = '<tr><td colspan="7" class="empty">아직 조회하지 않았습니다.</td></tr>';
+      searchCount.textContent = '';
+      updateActionButtonsState();
       return;
     }
 
+    if (filtered.length === 0) {
+      tableBody.innerHTML = '<tr><td colspan="7" class="empty">검색 결과가 없습니다.</td></tr>';
+    } else {
+      tableBody.innerHTML = filtered
+        .map((c, i) => {
+          const checked = checkedEmails.has(c.memberEmail) ? 'checked' : '';
+          return `
+            <tr>
+              <td><input type="checkbox" class="cc-row-check" data-email="${escapeHtml(c.memberEmail)}" ${checked} /></td>
+              <td>${escapeHtml(c.memberName) || '-'}</td>
+              <td>${escapeHtml(c.memberEmail) || '-'}</td>
+              <td>${escapeHtml(c.requester) || '-'}</td>
+              <td>${escapeHtml(c.refundAmount) || '-'}</td>
+              <td>${escapeHtml(c.reasonType) || '-'}</td>
+              <td>${escapeHtml(c.detail) || '-'}</td>
+            </tr>
+          `;
+        })
+        .join('');
+    }
+
+    tableBody.querySelectorAll('.cc-row-check').forEach((checkbox) => {
+      checkbox.addEventListener('change', () => {
+        const email = checkbox.dataset.email;
+        if (checkbox.checked) checkedEmails.add(email);
+        else checkedEmails.delete(email);
+        updateActionButtonsState();
+      });
+    });
+
+    if (query) {
+      searchCount.textContent = `${filtered.length} / ${cardCancels.length}건 일치`;
+    } else {
+      searchCount.textContent = `총 ${cardCancels.length}건`;
+    }
+    updateActionButtonsState();
+  }
+
+  searchInput.addEventListener('input', () => {
+    searchQuery = searchInput.value.trim().toLowerCase();
+    renderTable();
+  });
+
+  selectAllCheckbox.addEventListener('change', () => {
+    if (selectAllCheckbox.checked) {
+      cardCancels.forEach((c) => checkedEmails.add(c.memberEmail));
+    } else {
+      checkedEmails.clear();
+    }
+    renderTable();
+  });
+
+  // ---- 조회 시작 / 선택 회원 상담관리 열기 ----
+  fetchBtn.addEventListener('click', async () => {
+    cardCancels = [];
+    checkedEmails.clear();
+    selectAllCheckbox.checked = false;
+    renderTable();
     logOutput.innerHTML = '';
 
-    const result = await window.api.startJob({ jobId: 'card_cancel_open_consult', memberEmail });
+    const result = await window.api.startJob({ jobId: 'card_cancel_fetch' });
     if (!result.started) {
       alert('이미 실행 중인 작업이 있습니다.');
       return;
     }
 
-    openBtn.disabled = true;
+    fetchBtn.disabled = true;
+  });
+
+  async function startConsultJob(emails) {
+    logOutput.innerHTML = '';
+    const result = await window.api.startJob({ jobId: 'card_cancel_open_consult', memberEmails: emails });
+    if (!result.started) {
+      alert('이미 실행 중인 작업이 있습니다.');
+      return;
+    }
+    fetchBtn.disabled = true;
+    openConsultBtn.disabled = true;
+    manualOpenBtn.disabled = true;
     stopBtn.disabled = false;
+  }
+
+  openConsultBtn.addEventListener('click', () => {
+    if (checkedEmails.size === 0) {
+      alert('먼저 확인할 회원을 체크해주세요.');
+      return;
+    }
+    startConsultJob(Array.from(checkedEmails));
+  });
+
+  manualOpenBtn.addEventListener('click', () => {
+    const email = manualEmailInput.value.trim();
+    if (!email) {
+      alert('회원 이메일(ID)을 입력해주세요.');
+      return;
+    }
+    startConsultJob([email]);
   });
 
   stopBtn.addEventListener('click', async () => {
@@ -415,13 +573,19 @@ function buildCardCancelPanel(container) {
       appendLog(data.level || 'info', data.message || '');
     });
 
-    window.api.onJobRecord(() => {});
+    window.api.onJobRecord((data) => {
+      if (data.kind !== 'card_cancel' || !data.cardCancel) return;
+      cardCancels.push(data.cardCancel);
+      renderTable();
+    });
 
     window.api.onJobDone((data) => {
       if (typeof data.code === 'undefined') return;
       appendLog('info', `작업 프로세스 종료 (종료 코드: ${data.code})`);
-      openBtn.disabled = false;
+      fetchBtn.disabled = false;
+      manualOpenBtn.disabled = false;
       stopBtn.disabled = true;
+      updateActionButtonsState();
     });
   }
 

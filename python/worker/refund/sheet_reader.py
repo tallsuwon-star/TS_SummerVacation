@@ -42,6 +42,16 @@ NAME_HEADER_CANDIDATES = ["회원 이름", "회원명", "이름"]
 EMAIL_HEADER_CANDIDATES = ["ID", "이메일", "회원 ID", "회원 이메일"]
 AMOUNT_HEADER_CANDIDATES = ["환불금액", "환불 금액"]
 
+# 카드취소("카드 환불") 섹션. 계좌 환불 섹션과 같은 시트 안의 다른 섹션이며,
+# 헤더가 2줄로 나뉘어 있다 — 앞줄(섹션 제목이 있는 줄)에 "신규/기존"/"사유"/
+# "내용(...)" 같은 뒤쪽 컬럼명이, 바로 다음 줄에 "날짜"~"처리날짜" 같은
+# 앞쪽 컬럼명이 적혀 있다. 계좌 환불처럼 별도 계좌정보 칸이 없다(카드
+# 취소라 계좌이체가 필요 없음) — 대신 사유/내용을 확인용으로 보여준다.
+CARD_SECTION_TITLE = "카드 환불"
+CARD_REQUESTER_HEADER_CANDIDATES = ["요청자"]
+CARD_REASON_TYPE_HEADER_CANDIDATES = ["사유"]
+CARD_DETAIL_HEADER_CANDIDATES = ["내용(퇴원,수업변경,수업 취소의 자세한 사유 / 금액)", "내용"]
+
 # 계좌정보 자유 텍스트에서 "은행명/계좌번호/예금주"를 뽑아낸다.
 # 실제 기록을 보면 담당자마다 적는 순서/구분자가 다 달라서 고정된 순서
 # 패턴 하나로는 안 된다 — 지금까지 확인된 실제 예시만 해도:
@@ -95,12 +105,12 @@ def _is_target_color(cell) -> bool:
     )
 
 
-def _find_section_sheet(workbook):
-    """모든 탭을 뒤져 SECTION_TITLE이 적힌 셀이 있는 워크시트와 그 행 번호(1-based)를 찾는다."""
+def _find_section_sheet(workbook, title: str = SECTION_TITLE):
+    """모든 탭을 뒤져 title이 적힌 셀이 있는 워크시트와 그 행 번호(1-based)를 찾는다."""
     for worksheet in workbook.worksheets:
         for row in worksheet.iter_rows():
             for cell in row:
-                if _cell_text(cell) == SECTION_TITLE:
+                if _cell_text(cell) == title:
                     return worksheet, cell.row
     return None, None
 
@@ -108,6 +118,12 @@ def _find_section_sheet(workbook):
 def _find_header_index(headers: list[str], candidates: list[str]) -> int | None:
     for i, header in enumerate(headers):
         if header in candidates:
+            return i
+    # 정확히 일치하는 헤더가 없으면, 후보 문구를 포함하는 헤더를 찾는다
+    # (예: "내용(퇴원,수업변경,수업 취소의 자세한 사유 / 금액)" 같은 긴 헤더는
+    # 후보 "내용"을 포함만 해도 매칭되게).
+    for i, header in enumerate(headers):
+        if any(candidate and candidate in header for candidate in candidates):
             return i
     return None
 
@@ -265,6 +281,78 @@ def fetch_pending_refunds() -> list[dict]:
                 "accountNumberFormatted": dash_result["formatted"],
                 "accountNumberVerified": dash_result["verified"],
                 "needsReview": parsed["needs_review"] or not dash_result["verified"],
+            }
+        )
+
+    return results
+
+
+def _row_value(row_texts: list[str], idx: int | None) -> str:
+    return row_texts[idx] if idx is not None and idx < len(row_texts) else ""
+
+
+def fetch_pending_card_cancellations() -> list[dict]:
+    """"카드 환불" 섹션에서 "처리유무" 칸이 주황색(#FF9900)인 행만 골라
+    회원명/이메일/요청자/환불금액/사유/내용으로 정리해 반환한다. 카드취소는
+    계좌이체가 필요 없어 계좌정보는 다루지 않는다 — 대신 상담관리 화면에서
+    직접 대조할 수 있도록 사유/내용을 그대로 보여준다."""
+    workbook = _download_workbook()
+    worksheet, title_row_num = _find_section_sheet(workbook, CARD_SECTION_TITLE)
+
+    if worksheet is None:
+        raise ValueError(f'시트에서 "{CARD_SECTION_TITLE}" 섹션을 찾지 못했습니다.')
+
+    header_row_num = title_row_num + 1
+    title_row_texts = [_cell_text(cell) for cell in worksheet[title_row_num]]
+    header_row_texts = [_cell_text(cell) for cell in worksheet[header_row_num]]
+
+    # 헤더가 2줄로 나뉘어 있어(뒤쪽 컬럼명은 제목이 있는 줄에, 앞쪽 컬럼명은
+    # 바로 다음 줄에 적혀 있음), 같은 위치에서 header 줄이 비어있으면 title
+    # 줄 값으로 채워서 하나의 헤더로 합친다.
+    combined_len = max(len(title_row_texts), len(header_row_texts))
+    combined_headers = [
+        (header_row_texts[i] if i < len(header_row_texts) else "")
+        or (title_row_texts[i] if i < len(title_row_texts) else "")
+        for i in range(combined_len)
+    ]
+
+    status_idx = _find_header_index(combined_headers, STATUS_HEADER_CANDIDATES)
+    name_idx = _find_header_index(combined_headers, NAME_HEADER_CANDIDATES)
+    email_idx = _find_header_index(combined_headers, EMAIL_HEADER_CANDIDATES)
+    requester_idx = _find_header_index(combined_headers, CARD_REQUESTER_HEADER_CANDIDATES)
+    amount_idx = _find_header_index(combined_headers, AMOUNT_HEADER_CANDIDATES)
+    reason_type_idx = _find_header_index(combined_headers, CARD_REASON_TYPE_HEADER_CANDIDATES)
+    detail_idx = _find_header_index(combined_headers, CARD_DETAIL_HEADER_CANDIDATES)
+
+    if status_idx is None:
+        raise ValueError(f'헤더에서 "처리유무" 컬럼을 찾지 못했습니다. 헤더: {combined_headers}')
+
+    results: list[dict] = []
+    for row_cells in worksheet.iter_rows(min_row=header_row_num + 1):
+        row_texts = [_cell_text(cell) for cell in row_cells]
+        if not any(row_texts):
+            break  # 빈 행 = 섹션 끝
+        if CARD_SECTION_TITLE in row_texts:
+            break  # 다음 섹션 시작
+
+        status_cell = row_cells[status_idx] if status_idx < len(row_cells) else None
+        if status_cell is None or not _is_target_color(status_cell):
+            continue
+
+        member_name = _row_value(row_texts, name_idx)
+        member_email = _row_value(row_texts, email_idx)
+
+        if member_name.strip() in ("", "-") and member_email.strip() in ("", "-"):
+            continue
+
+        results.append(
+            {
+                "memberName": member_name,
+                "memberEmail": member_email,
+                "requester": _row_value(row_texts, requester_idx),
+                "refundAmount": _row_value(row_texts, amount_idx),
+                "reasonType": _row_value(row_texts, reason_type_idx),
+                "detail": _row_value(row_texts, detail_idx),
             }
         )
 

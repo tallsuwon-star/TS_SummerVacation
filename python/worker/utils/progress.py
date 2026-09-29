@@ -33,5 +33,11 @@ def emit_refund_record(refund: dict) -> None:
     emit({"type": "record", "kind": "refund", "refund": refund})
 
 
+def emit_card_cancel_record(card_cancel: dict) -> None:
+    """카드취소 대상 한 건(회원명/이메일/요청자/사유/내용)이 확정될 때마다
+    즉시 화면 표에 반영할 수 있도록 스트리밍."""
+    emit({"type": "record", "kind": "card_cancel", "cardCancel": card_cancel})
+
+
 def emit_done(summary: dict) -> None:
     emit({"type": "done", "summary": summary})
