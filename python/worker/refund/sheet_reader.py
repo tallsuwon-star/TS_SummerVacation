@@ -42,21 +42,23 @@ NAME_HEADER_CANDIDATES = ["회원 이름", "회원명", "이름"]
 EMAIL_HEADER_CANDIDATES = ["ID", "이메일", "회원 ID", "회원 이메일"]
 AMOUNT_HEADER_CANDIDATES = ["환불금액", "환불 금액"]
 
-# 계좌정보 자유 텍스트에서 "은행명/계좌번호/예금주" 부분을 뽑아낸다.
-# 실제 기록을 보면 담당자마다 적는 순서/구분자가 다 달라서(예: "우리은행
-# 1002-137-165652 장진주", "농협은행 3521272076223 / 예금주 : 안은혜",
-# "1234567891011 신한은행 이룰루") 은행명-계좌번호 순서와 계좌번호-은행명
-# 순서를 둘 다 시도하고, 예금주 표기도 "/ 예금주 : 이름"과 그냥 이름만
-# 붙는 경우를 둘 다 받아준다. 계좌번호에 이미 '-'가 들어있어도(수기 입력)
-# 숫자만 뽑아서 은행별 규칙으로 다시 통일해서 포맷한다.
-_BANK_TOKEN = r"(?:\S*은행\S*|\S*뱅크\S*|우체국|새마을금고|신협)"
-_ACCOUNT_TOKEN = r"\d[\d\-\s]*\d|\d"
-_HOLDER_TAIL = r"(?:\s*/\s*예금주\s*[:：]?\s*(?P<holder1>.+)|\s+(?P<holder2>.+))$"
-
-ACCOUNT_INFO_PATTERNS = [
-    re.compile(rf"(?P<bank>{_BANK_TOKEN})\s+(?P<account>{_ACCOUNT_TOKEN}){_HOLDER_TAIL}"),
-    re.compile(rf"(?P<account>{_ACCOUNT_TOKEN})\s+(?P<bank>{_BANK_TOKEN}){_HOLDER_TAIL}"),
-]
+# 계좌정보 자유 텍스트에서 "은행명/계좌번호/예금주"를 뽑아낸다.
+# 실제 기록을 보면 담당자마다 적는 순서/구분자가 다 달라서 고정된 순서
+# 패턴 하나로는 안 된다 — 지금까지 확인된 실제 예시만 해도:
+#   "우리은행 1002-137-165652 장진주"        (은행 계좌 예금주, 공백)
+#   "농협은행 3521272076223 / 예금주 : 안은혜" (은행 계좌 / 예금주 : 이름)
+#   "1234567891011 신한은행 이룰루"          (계좌 은행 예금주, 공백)
+#   "...금액 34,800원 계산 87380201308707/이혜정/국민은행" (계좌 예금주 은행, '/')
+# 그래서 순서를 가정하지 않고: (1) 은행명을 먼저 찾고(마지막에 나온 것을
+# 실제 계좌정보로 본다 - 앞쪽 메모 문장에 쓰였을 가능성은 낮음),
+# (2) 은행명 주변(앞뒤 일정 범위)에서 8자리 이상 연속된 숫자 뭉치를
+# 계좌번호로 본다 — "34,800원"처럼 쉼표가 섞인 금액이나 "6개월"/"4/9"
+# 같은 날짜·기간 표현은 쉼표를 허용하지 않고 자릿수도 짧아서 자동으로
+# 걸러진다. (3) 은행명/계좌번호 사이 또는 그 뒤에 남는 텍스트를 예금주로 본다.
+_BANK_RE = re.compile(r"[^\s/]*은행[^\s/]*|[^\s/]*뱅크[^\s/]*|우체국|새마을금고|신협")
+_ACCOUNT_RE = re.compile(r"\d[\d\-\s]{6,}\d")
+_MIN_ACCOUNT_DIGITS = 8
+_HOLDER_WINDOW_CHARS = 40
 
 
 def _download_workbook():
@@ -110,42 +112,77 @@ def _find_header_index(headers: list[str], candidates: list[str]) -> int | None:
     return None
 
 
+def _needs_review_result(raw_text: str) -> dict:
+    return {
+        "memo": raw_text.strip(),
+        "account_number": "",
+        "bank_name": "",
+        "account_holder": "",
+        "needs_review": True,
+    }
+
+
+def _extract_holder(text: str, first_span: tuple[int, int], second_span: tuple[int, int]) -> str:
+    """은행명 span과 계좌번호 span 사이, 그 사이가 비어있으면 둘 다 지난 뒤의
+    남은 텍스트에서 예금주 이름을 뽑아낸다. "예금주" 표시어와 구분자(공백,
+    '/', ':')는 제거하고 남는 첫 토큰을 예금주로 본다."""
+    first_span, second_span = sorted([first_span, second_span])
+    between = text[first_span[1] : second_span[0]]
+    between_clean = re.sub(r"예금주", "", between)
+    between_clean = re.sub(r"[\s/:：,]+", " ", between_clean).strip()
+    if between_clean:
+        return between_clean.split(" ")[0]
+
+    after = text[second_span[1] : second_span[1] + 20]
+    after_clean = re.sub(r"예금주", "", after)
+    after_clean = re.sub(r"^[\s/:：,]+", "", after_clean)
+    token_match = re.match(r"\S+", after_clean)
+    return token_match.group(0) if token_match else ""
+
+
 def _parse_account_info(raw_text: str) -> dict:
     """자유 텍스트에서 메모/계좌번호/은행명/예금주를 뽑아낸다.
     형식이 예상과 다르면 needs_review=True로 표시하고 원문을 그대로 담아 반환한다."""
     if not raw_text or not raw_text.strip():
-        return {
-            "memo": "",
-            "account_number": "",
-            "bank_name": "",
-            "account_holder": "",
-            "needs_review": True,
-        }
+        return _needs_review_result("")
 
-    match = None
-    for pattern in ACCOUNT_INFO_PATTERNS:
-        match = pattern.search(raw_text)
-        if match:
-            break
+    bank_matches = list(_BANK_RE.finditer(raw_text))
+    if not bank_matches:
+        return _needs_review_result(raw_text)
+    bank_match = bank_matches[-1]  # 여러 개면 실제 계좌정보 쪽(보통 뒤쪽)을 우선한다
 
-    if not match:
-        return {
-            "memo": raw_text.strip(),
-            "account_number": "",
-            "bank_name": "",
-            "account_holder": "",
-            "needs_review": True,
-        }
+    window_start = max(0, bank_match.start() - _HOLDER_WINDOW_CHARS)
+    window_end = min(len(raw_text), bank_match.end() + _HOLDER_WINDOW_CHARS)
+    window = raw_text[window_start:window_end]
+    bank_span_in_window = (bank_match.start() - window_start, bank_match.end() - window_start)
 
-    holder = match.group("holder1") or match.group("holder2") or ""
-    memo = raw_text[: match.start()].rstrip(", ").strip()
+    account_candidates = [
+        m for m in _ACCOUNT_RE.finditer(window) if sum(c.isdigit() for c in m.group(0)) >= _MIN_ACCOUNT_DIGITS
+    ]
+    if not account_candidates:
+        return _needs_review_result(raw_text)
+
+    def distance_to_bank(m: re.Match) -> int:
+        if m.end() <= bank_span_in_window[0]:
+            return bank_span_in_window[0] - m.end()
+        if m.start() >= bank_span_in_window[1]:
+            return m.start() - bank_span_in_window[1]
+        return 0
+
+    account_match = min(account_candidates, key=distance_to_bank)
+    account_span_in_window = (account_match.start(), account_match.end())
+
+    holder = _extract_holder(window, bank_span_in_window, account_span_in_window)
+
+    cluster_start = window_start + min(bank_span_in_window[0], account_span_in_window[0])
+    memo = raw_text[:cluster_start].rstrip(", ").strip()
 
     return {
         "memo": memo,
-        "account_number": "".join(ch for ch in match.group("account") if ch.isdigit()),
-        "bank_name": match.group("bank").strip(),
+        "account_number": "".join(ch for ch in account_match.group(0) if ch.isdigit()),
+        "bank_name": bank_match.group(0).strip(),
         "account_holder": holder.strip(),
-        "needs_review": False,
+        "needs_review": not holder,
     }
 
 
