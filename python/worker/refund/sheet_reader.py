@@ -112,6 +112,17 @@ def _find_header_index(headers: list[str], candidates: list[str]) -> int | None:
     return None
 
 
+def _short_reason(memo: str) -> str:
+    """지출결의서 "적요" 칸에 넣을 짧은 사유. 전체 메모(예: "형제할인 미적용
+    과정 차액 환불, 필리핀/6개월/주2회/25분/C타임, 4/2 시작 과정 미적용 금액
+    34,800원 계산")를 그대로 넣으면 글자가 많아 칸 안에서 자동으로 글씨가
+    작아지므로, 콤마로 구분된 맨 앞 구절(핵심 사유)만 쓰고 나머지(수강권
+    상세, 계산 과정 등)는 뺀다. 전체 원문은 비고 칸에 그대로 남긴다."""
+    if not memo:
+        return ""
+    return memo.split(",")[0].strip()
+
+
 def _needs_review_result(raw_text: str) -> dict:
     return {
         "memo": raw_text.strip(),
@@ -220,6 +231,14 @@ def fetch_pending_refunds() -> list[dict]:
         if status_cell is None or not _is_target_color(status_cell):
             continue
 
+        member_name = row_texts[name_idx] if name_idx is not None and name_idx < len(row_texts) else ""
+        member_email = row_texts[email_idx] if email_idx is not None and email_idx < len(row_texts) else ""
+
+        # 회원명/이메일이 둘 다 비어있거나 "-"인 행은 실제 환불 데이터가
+        # 아니라 시트 안의 안내/구분용 행일 가능성이 커서 건너뛴다.
+        if member_name.strip() in ("", "-") and member_email.strip() in ("", "-"):
+            continue
+
         # 계좌정보 칸은 헤더명이 통일돼 있지 않을 수 있어(개인정보라 자유
         # 서식으로 적히는 경우가 많음), 행에서 값이 있는 마지막 칸을
         # 계좌정보로 간주한다 (사용자 설명: "우측에 계좌정보들이 나와있음").
@@ -235,10 +254,12 @@ def fetch_pending_refunds() -> list[dict]:
 
         results.append(
             {
-                "memberName": row_texts[name_idx] if name_idx is not None and name_idx < len(row_texts) else "",
-                "memberEmail": row_texts[email_idx] if email_idx is not None and email_idx < len(row_texts) else "",
+                "memberName": member_name,
+                "memberEmail": member_email,
                 "refundAmount": row_texts[amount_idx] if amount_idx is not None and amount_idx < len(row_texts) else "",
                 "memo": parsed["memo"],
+                "shortReason": _short_reason(parsed["memo"]),
+                "rawText": account_info_raw,
                 "bankName": parsed["bank_name"],
                 "accountHolder": parsed["account_holder"],
                 "accountNumberFormatted": dash_result["formatted"],

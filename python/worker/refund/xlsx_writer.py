@@ -38,7 +38,10 @@ def _format_korean_date(d: date) -> str:
 
 
 def _member_line(refund: dict) -> str:
-    reason = (refund.get("memo") or "").strip()
+    # "적요" 칸은 글자가 많아지면 칸에 맞춰 글씨가 자동으로 작아지므로,
+    # 전체 메모가 아니라 핵심 사유(shortReason)만 짧게 넣는다. 원문 전체는
+    # 비고 칸(_remark_line)에 그대로 남긴다.
+    reason = (refund.get("shortReason") or "").strip()
     name = refund.get("memberName") or ""
     email = refund.get("memberEmail") or ""
     line = f"{name}  ( {email} )"
@@ -52,6 +55,12 @@ def _account_line(refund: dict) -> str:
     account_number = refund.get("accountNumberFormatted") or ""
     holder = refund.get("accountHolder") or ""
     return f"{bank} {account_number} / 예금주 : {holder}".strip()
+
+
+def _remark_line(refund: dict) -> str:
+    # "비고" 칸에는 시트에 기존에 기록돼 있던 내용을 그대로(가공 없이)
+    # 남겨서, 적요만 보고 이해가 안 될 때 원문을 바로 확인할 수 있게 한다.
+    return (refund.get("rawText") or "").strip()
 
 
 def generate_expense_forms(
@@ -97,6 +106,7 @@ def _write_single_form(chunk: list[dict], preparer_name: str, document_date: dat
 
         ws[f"C{top_row}"] = _member_line(refund)
         ws[f"C{bottom_row}"] = _account_line(refund)
+        ws[f"E{top_row}"] = _remark_line(refund)
 
         amount = _parse_amount(refund.get("refundAmount", ""))
         ws[f"D{top_row}"] = amount
