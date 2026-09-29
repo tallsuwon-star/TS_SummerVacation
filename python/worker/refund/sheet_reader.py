@@ -42,9 +42,21 @@ NAME_HEADER_CANDIDATES = ["회원 이름", "회원명", "이름"]
 EMAIL_HEADER_CANDIDATES = ["ID", "이메일", "회원 ID", "회원 이메일"]
 AMOUNT_HEADER_CANDIDATES = ["환불금액", "환불 금액"]
 
-# "<메모>, <비고>, <계좌번호> <은행명> <예금주>" 형태 자유 텍스트에서
-# 뒤쪽 "계좌번호 은행명 예금주" 부분을 뽑아낸다.
-ACCOUNT_INFO_PATTERN = re.compile(r"([\d\-\s]*\d)\s+(\S*은행\S*|\S*뱅크\S*|우체국|새마을금고|신협)\s+(\S.*)")
+# 계좌정보 자유 텍스트에서 "은행명/계좌번호/예금주" 부분을 뽑아낸다.
+# 실제 기록을 보면 담당자마다 적는 순서/구분자가 다 달라서(예: "우리은행
+# 1002-137-165652 장진주", "농협은행 3521272076223 / 예금주 : 안은혜",
+# "1234567891011 신한은행 이룰루") 은행명-계좌번호 순서와 계좌번호-은행명
+# 순서를 둘 다 시도하고, 예금주 표기도 "/ 예금주 : 이름"과 그냥 이름만
+# 붙는 경우를 둘 다 받아준다. 계좌번호에 이미 '-'가 들어있어도(수기 입력)
+# 숫자만 뽑아서 은행별 규칙으로 다시 통일해서 포맷한다.
+_BANK_TOKEN = r"(?:\S*은행\S*|\S*뱅크\S*|우체국|새마을금고|신협)"
+_ACCOUNT_TOKEN = r"\d[\d\-\s]*\d|\d"
+_HOLDER_TAIL = r"(?:\s*/\s*예금주\s*[:：]?\s*(?P<holder1>.+)|\s+(?P<holder2>.+))$"
+
+ACCOUNT_INFO_PATTERNS = [
+    re.compile(rf"(?P<bank>{_BANK_TOKEN})\s+(?P<account>{_ACCOUNT_TOKEN}){_HOLDER_TAIL}"),
+    re.compile(rf"(?P<account>{_ACCOUNT_TOKEN})\s+(?P<bank>{_BANK_TOKEN}){_HOLDER_TAIL}"),
+]
 
 
 def _download_workbook():
@@ -110,7 +122,12 @@ def _parse_account_info(raw_text: str) -> dict:
             "needs_review": True,
         }
 
-    match = ACCOUNT_INFO_PATTERN.search(raw_text)
+    match = None
+    for pattern in ACCOUNT_INFO_PATTERNS:
+        match = pattern.search(raw_text)
+        if match:
+            break
+
     if not match:
         return {
             "memo": raw_text.strip(),
@@ -120,13 +137,13 @@ def _parse_account_info(raw_text: str) -> dict:
             "needs_review": True,
         }
 
-    account_part, bank_name, holder = match.groups()
+    holder = match.group("holder1") or match.group("holder2") or ""
     memo = raw_text[: match.start()].rstrip(", ").strip()
 
     return {
         "memo": memo,
-        "account_number": "".join(ch for ch in account_part if ch.isdigit()),
-        "bank_name": bank_name.strip(),
+        "account_number": "".join(ch for ch in match.group("account") if ch.isdigit()),
+        "bank_name": match.group("bank").strip(),
         "account_holder": holder.strip(),
         "needs_review": False,
     }
