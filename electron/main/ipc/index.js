@@ -35,6 +35,7 @@ function registerIpcHandlers(mainWindow) {
   ipcMain.handle('file:saveAs', (_event, { sourcePath, suggestedName }) =>
     fileSave.saveFileAs(mainWindow, sourcePath, suggestedName)
   );
+  ipcMain.handle('file:reveal', (_event, sourcePath) => fileSave.revealFile(sourcePath));
 }
 
 module.exports = registerIpcHandlers;

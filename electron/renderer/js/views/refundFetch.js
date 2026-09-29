@@ -48,7 +48,9 @@ function renderRefundFetchView(container) {
       </div>
       <div class="field-label">
         기존에 주신 "지출결의서" 양식 그대로(적요/금액/비고, 22건까지 한 장) 채워서
-        만듭니다. 22건이 넘으면 여러 장으로 나눠 각각 저장 대화상자가 뜹니다.
+        만듭니다. 만들어지면 파일이 있는 폴더가 탐색기로 자동으로 열리고,
+        이어서 "다른 이름으로 저장" 창도 뜹니다(다른 위치에 저장하고 싶을 때만
+        사용, 닫아도 무방합니다). 22건이 넘으면 여러 장으로 나눠 각각 처리됩니다.
       </div>
     </section>
 
@@ -245,10 +247,15 @@ function renderRefundFetchView(container) {
     if (typeof data.code === 'undefined') {
       if (currentJobId === 'refund_generate' && data.outputPaths) {
         for (const outputPath of data.outputPaths) {
+          appendLog('info', `생성된 파일 위치: ${outputPath}`);
+          // 저장 대화상자가 다른 창 뒤에 숨어 놓칠 수 있어, 항상 먼저
+          // 탐색기로 파일 위치를 직접 열어 보여준다 (창 포커스와 무관하게 동작).
+          await window.api.revealFile(outputPath);
+
           const fileName = outputPath.split(/[\\/]/).pop();
           const saveResult = await window.api.saveFileAs(outputPath, fileName);
           if (saveResult.success) {
-            appendLog('info', `저장 완료: ${saveResult.savedPath}`);
+            appendLog('info', `다른 이름으로 저장 완료: ${saveResult.savedPath}`);
           } else if (!saveResult.canceled) {
             appendLog('error', `저장 실패: ${saveResult.error || '알 수 없는 오류'}`);
           }

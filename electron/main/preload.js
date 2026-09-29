@@ -57,4 +57,8 @@ contextBridge.exposeInMainWorld('api', {
   // 로컬에 생성된 파일(예: 환불 지출결의서 엑셀)을 사용자가 원하는 위치에
   // "다른 이름으로 저장" 하도록 네이티브 저장 대화상자를 띄운다.
   saveFileAs: (sourcePath, suggestedName) => ipcRenderer.invoke('file:saveAs', { sourcePath, suggestedName }),
+
+  // 저장 대화상자를 놓쳤을 때를 대비해, 생성된 파일이 있는 폴더를 탐색기로
+  // 열어 파일을 보여준다.
+  revealFile: (sourcePath) => ipcRenderer.invoke('file:reveal', sourcePath),
 });
