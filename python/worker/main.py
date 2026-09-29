@@ -16,6 +16,7 @@ from .jobs import (
     office_report_crawl,
     office_report_submit,
     overdue_report,
+    refund_fetch,
     tutor_search_test,
     vocaking_report,
 )
@@ -31,6 +32,7 @@ JOBS = {
     "naver_store_report": naver_store_report.run,
     "office_report_crawl": office_report_crawl.run,
     "office_report_submit": office_report_submit.run,
+    "refund_fetch": refund_fetch.run,
 }
 
 

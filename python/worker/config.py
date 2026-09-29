@@ -31,6 +31,11 @@ OFFICE_BASE_URL = os.getenv("OFFICE_BASE_URL", "https://office.talkstation.co.kr
 GOOGLE_SHEETS_CREDENTIALS_PATH = os.getenv("GOOGLE_SHEETS_CREDENTIALS_PATH", "")
 GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID", "")
 
+# 환불 처리(지출결의서) 자동화가 읽는 "계좌 환불" 기록용 구글 시트.
+# 위 GOOGLE_SHEET_ID(보강권 기록용)와는 다른 별도 시트라 ID를 따로 둔다.
+# 인증 파일은 같은 서비스 계정을 재사용하되, 그 계정에 이 시트도 공유해줘야 한다.
+REFUND_SHEET_ID = os.getenv("REFUND_SHEET_ID", "")
+
 # 네이버 스마트스토어 자동화 (python/worker/naver/, jobs/naver_store_report.py)
 NAVER_ID = os.getenv("NAVER_ID", "")
 NAVER_PASSWORD = os.getenv("NAVER_PASSWORD", "")

@@ -27,5 +27,11 @@ def emit_record(tutor: str, member: str, credit_count: int) -> None:
     emit({"type": "record", "tutor": tutor, "member": member, "credit_count": credit_count})
 
 
+def emit_refund_record(refund: dict) -> None:
+    """환불 대상 한 건(회원명/이메일/환불금액/계좌정보)이 확정될 때마다
+    즉시 화면 표에 반영할 수 있도록 스트리밍."""
+    emit({"type": "record", "kind": "refund", "refund": refund})
+
+
 def emit_done(summary: dict) -> None:
     emit({"type": "done", "summary": summary})
