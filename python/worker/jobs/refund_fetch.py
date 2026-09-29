@@ -2,7 +2,9 @@
 
 구글 시트의 "계좌 환불 (차액 환불 가능)" 섹션에서 "처리유무" 칸이 주황색
 (#FF9900)인 행만 읽어와 회원명/이메일/환불금액/계좌정보(은행별 '-' 포맷)로
-화면에 표로 보여준다. 셀레니움 없이 구글 시트 API만 호출하므로 빠르게 끝난다.
+화면에 표로 보여준다. 이 시트는 링크만 있으면 로그인 없이 열람 가능하도록
+공유돼 있어(사용자 확인) 구글 계정 인증 없이 공개 다운로드 링크로 읽으므로
+빠르게 끝난다.
 """
 
 from .. import config
@@ -12,12 +14,8 @@ from ..utils.progress import emit_done, emit_log, emit_refund_record
 
 
 def run(job_payload: dict, control: ControlState) -> None:
-    if not config.REFUND_SHEET_ID or not config.GOOGLE_SHEETS_CREDENTIALS_PATH:
-        emit_log(
-            "환불 시트 연결 정보(REFUND_SHEET_ID / GOOGLE_SHEETS_CREDENTIALS_PATH)가 "
-            ".env에 설정되지 않았습니다.",
-            level="error",
-        )
+    if not config.REFUND_SHEET_ID:
+        emit_log("환불 시트 ID(REFUND_SHEET_ID)가 설정되지 않았습니다.", level="error")
         emit_done({"success": False, "error": "missing-config"})
         return
 
