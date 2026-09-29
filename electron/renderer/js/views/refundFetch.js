@@ -23,16 +23,32 @@ function renderRefundFetchView(container) {
             <th>회원명</th>
             <th>회원이메일</th>
             <th>환불금액</th>
+            <th>환불사유</th>
             <th>계좌정보</th>
           </tr>
         </thead>
         <tbody id="refund-table-body">
-          <tr><td colspan="4" class="empty">아직 조회하지 않았습니다.</td></tr>
+          <tr><td colspan="5" class="empty">아직 조회하지 않았습니다.</td></tr>
         </tbody>
       </table>
       <div class="field-label">
         ⚠ 계좌번호의 '-' 구분은 은행별로 흔히 쓰는 형식을 따른 참고값입니다.
         "확인 필요" 표시가 붙은 계좌는 실제 이체 전 반드시 직접 대조해주세요.
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="field-label">지출결의서 생성</div>
+      <div class="checkbox-row">
+        <label for="refund-preparer-name">담당자/청구자 이름</label>
+        <input type="text" id="refund-preparer-name" placeholder="예: 이성규" />
+      </div>
+      <div class="job-controls">
+        <button id="generate-btn" class="btn btn-primary" disabled>엑셀 다운로드</button>
+      </div>
+      <div class="field-label">
+        기존에 주신 "지출결의서" 양식 그대로(적요/금액/비고, 22건까지 한 장) 채워서
+        만듭니다. 22건이 넘으면 여러 장으로 나눠 각각 저장 대화상자가 뜹니다.
       </div>
     </section>
 
@@ -47,6 +63,8 @@ function renderRefundFetchView(container) {
   `;
 
   const startBtn = document.getElementById('start-btn');
+  const generateBtn = document.getElementById('generate-btn');
+  const preparerNameInput = document.getElementById('refund-preparer-name');
   const tableBody = document.getElementById('refund-table-body');
   const refundSearchInput = document.getElementById('refund-search');
   const refundSearchCount = document.getElementById('refund-search-count');
@@ -54,6 +72,15 @@ function renderRefundFetchView(container) {
   const logOutput = document.getElementById('log-output');
   const logSearchInput = document.getElementById('log-search');
   const logSearchCount = document.getElementById('log-search-count');
+
+  (async () => {
+    const settings = await window.api.getSettings();
+    preparerNameInput.value = settings.refundPreparerName || '';
+  })();
+
+  preparerNameInput.addEventListener('change', async () => {
+    await window.api.setSettings({ refundPreparerName: preparerNameInput.value.trim() });
+  });
 
   // ---- 실행 로그 (검색 필터) ----
   let logSearchQuery = '';
@@ -101,6 +128,10 @@ function renderRefundFetchView(container) {
     return parts.join(' ');
   }
 
+  function updateGenerateButtonState() {
+    generateBtn.disabled = refunds.length === 0;
+  }
+
   function renderTable() {
     const query = refundSearchQuery;
     const filtered = refunds.filter((r) => {
@@ -109,13 +140,14 @@ function renderRefundFetchView(container) {
     });
 
     if (refunds.length === 0) {
-      tableBody.innerHTML = '<tr><td colspan="4" class="empty">아직 조회하지 않았습니다.</td></tr>';
+      tableBody.innerHTML = '<tr><td colspan="5" class="empty">아직 조회하지 않았습니다.</td></tr>';
       refundSearchCount.textContent = '';
+      updateGenerateButtonState();
       return;
     }
 
     if (filtered.length === 0) {
-      tableBody.innerHTML = '<tr><td colspan="4" class="empty">검색 결과가 없습니다.</td></tr>';
+      tableBody.innerHTML = '<tr><td colspan="5" class="empty">검색 결과가 없습니다.</td></tr>';
     } else {
       tableBody.innerHTML = filtered
         .map((r) => {
@@ -127,6 +159,7 @@ function renderRefundFetchView(container) {
               <td>${escapeHtml(r.memberName) || '-'}</td>
               <td>${escapeHtml(r.memberEmail) || '-'}</td>
               <td>${escapeHtml(r.refundAmount) || '-'}</td>
+              <td>${escapeHtml(r.memo) || '-'}</td>
               <td>${escapeHtml(accountInfoText(r))}${needsReviewBadge}</td>
             </tr>
           `;
@@ -139,6 +172,7 @@ function renderRefundFetchView(container) {
     } else {
       refundSearchCount.textContent = `총 ${refunds.length}건`;
     }
+    updateGenerateButtonState();
   }
 
   function escapeHtml(text) {
@@ -155,7 +189,10 @@ function renderRefundFetchView(container) {
     renderTable();
   });
 
-  // ---- 조회 시작 ----
+  // ---- 조회 시작 / 엑셀 생성 (같은 job 스트림을 공유하므로 어떤 작업이
+  // 진행 중인지 currentJobId로 구분한다) ----
+  let currentJobId = null;
+
   startBtn.addEventListener('click', async () => {
     refunds = [];
     renderTable();
@@ -167,7 +204,31 @@ function renderRefundFetchView(container) {
       return;
     }
 
+    currentJobId = 'refund_fetch';
     startBtn.disabled = true;
+    generateBtn.disabled = true;
+  });
+
+  generateBtn.addEventListener('click', async () => {
+    const preparerName = preparerNameInput.value.trim();
+    if (!preparerName) {
+      alert('담당자/청구자 이름을 입력해주세요.');
+      return;
+    }
+    if (refunds.length === 0) {
+      alert('먼저 조회를 실행해주세요.');
+      return;
+    }
+
+    const result = await window.api.startJob({ jobId: 'refund_generate', refunds, preparerName });
+    if (!result.started) {
+      alert('이미 실행 중인 작업이 있습니다.');
+      return;
+    }
+
+    currentJobId = 'refund_generate';
+    startBtn.disabled = true;
+    generateBtn.disabled = true;
   });
 
   window.api.onJobLog((data) => {
@@ -180,10 +241,26 @@ function renderRefundFetchView(container) {
     renderTable();
   });
 
-  window.api.onJobDone((data) => {
-    if (typeof data.code === 'undefined') return;
+  window.api.onJobDone(async (data) => {
+    if (typeof data.code === 'undefined') {
+      if (currentJobId === 'refund_generate' && data.outputPaths) {
+        for (const outputPath of data.outputPaths) {
+          const fileName = outputPath.split(/[\\/]/).pop();
+          const saveResult = await window.api.saveFileAs(outputPath, fileName);
+          if (saveResult.success) {
+            appendLog('info', `저장 완료: ${saveResult.savedPath}`);
+          } else if (!saveResult.canceled) {
+            appendLog('error', `저장 실패: ${saveResult.error || '알 수 없는 오류'}`);
+          }
+        }
+      }
+      return;
+    }
+
     appendLog('info', `작업 프로세스 종료 (종료 코드: ${data.code})`);
     startBtn.disabled = false;
+    updateGenerateButtonState();
+    currentJobId = null;
   });
 }
 

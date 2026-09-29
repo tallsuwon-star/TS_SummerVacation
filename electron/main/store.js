@@ -31,6 +31,8 @@ const store = new Store({
     officeReportTargetName: '',
     // 업무보고 "정리하기"(Claude API로 메모 다듬기)에 쓰는 API 키.
     anthropicApiKey: '',
+    // 환불 지출결의서에 적을 담당자/청구자 이름(마지막 입력값 기억).
+    refundPreparerName: '이성규',
   },
 });
 

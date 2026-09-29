@@ -184,6 +184,7 @@ def fetch_pending_refunds() -> list[dict]:
                 "memberName": row_texts[name_idx] if name_idx is not None and name_idx < len(row_texts) else "",
                 "memberEmail": row_texts[email_idx] if email_idx is not None and email_idx < len(row_texts) else "",
                 "refundAmount": row_texts[amount_idx] if amount_idx is not None and amount_idx < len(row_texts) else "",
+                "memo": parsed["memo"],
                 "bankName": parsed["bank_name"],
                 "accountHolder": parsed["account_holder"],
                 "accountNumberFormatted": dash_result["formatted"],

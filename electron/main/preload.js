@@ -53,4 +53,8 @@ contextBridge.exposeInMainWorld('api', {
   // 업무보고: <input type="file">로 고른 파일의 실제 경로 (Electron 32+에서는
   // File.path가 제거되어 webUtils.getPathForFile로만 얻을 수 있다).
   getPathForFile: (file) => webUtils.getPathForFile(file),
+
+  // 로컬에 생성된 파일(예: 환불 지출결의서 엑셀)을 사용자가 원하는 위치에
+  // "다른 이름으로 저장" 하도록 네이티브 저장 대화상자를 띄운다.
+  saveFileAs: (sourcePath, suggestedName) => ipcRenderer.invoke('file:saveAs', { sourcePath, suggestedName }),
 });

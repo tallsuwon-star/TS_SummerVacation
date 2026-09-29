@@ -7,6 +7,7 @@ const clipboard = require('./clipboard');
 const gitLog = require('./gitLog');
 const officeReports = require('./officeReports');
 const anthropicClient = require('./anthropic');
+const fileSave = require('./fileSave');
 
 function registerIpcHandlers(mainWindow) {
   ipcMain.handle('settings:get', () => store.store);
@@ -30,6 +31,10 @@ function registerIpcHandlers(mainWindow) {
   ipcMain.handle('report:getTodayCommits', () => gitLog.getTodayCommits());
   ipcMain.handle('report:getOfficeReports', () => officeReports.getLatestReports());
   ipcMain.handle('report:tidyText', (_event, rawText) => anthropicClient.tidyText(rawText));
+
+  ipcMain.handle('file:saveAs', (_event, { sourcePath, suggestedName }) =>
+    fileSave.saveFileAs(mainWindow, sourcePath, suggestedName)
+  );
 }
 
 module.exports = registerIpcHandlers;

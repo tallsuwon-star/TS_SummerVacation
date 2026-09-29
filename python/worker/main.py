@@ -17,6 +17,7 @@ from .jobs import (
     office_report_submit,
     overdue_report,
     refund_fetch,
+    refund_generate,
     tutor_search_test,
     vocaking_report,
 )
@@ -33,6 +34,7 @@ JOBS = {
     "office_report_crawl": office_report_crawl.run,
     "office_report_submit": office_report_submit.run,
     "refund_fetch": refund_fetch.run,
+    "refund_generate": refund_generate.run,
 }
 
 
