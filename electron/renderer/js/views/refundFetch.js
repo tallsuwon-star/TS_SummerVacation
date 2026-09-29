@@ -9,9 +9,9 @@ function renderRefundFetchView(container) {
 
     <section class="panel">
       <div class="field-label">
-        구글 시트의 "계좌 환불 (차액 환불 가능)" 섹션에서 처리유무가 "입금확인중"인
-        건만 가져와 아래 표로 보여줍니다. 이 정보는 이 화면에만 표시되며 어디로도
-        전송/저장되지 않습니다.
+        구글 시트의 "계좌 환불 (차액 환불 가능)" 섹션에서 "처리유무" 칸이 주황색
+        (#FF9900)으로 표시된 건만 가져와 아래 표로 보여줍니다. 이 정보는 이 화면에만
+        표시되며 어디로도 전송/저장되지 않습니다.
       </div>
       <div class="log-toolbar">
         <input type="text" id="refund-search" class="roster-search-input" placeholder="회원명/이메일 검색..." />

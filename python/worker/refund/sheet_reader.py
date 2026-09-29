@@ -6,6 +6,10 @@
 헤더명이 통일돼 있지 않을 수 있으므로, 사용자가 설명한 대로 "행에서 가장
 오른쪽(마지막)에 값이 있는 칸"을 계좌정보 자유 텍스트로 간주해 파싱한다.
 
+처리 대상 판단은 "처리유무" 칸의 텍스트가 아니라 셀 배경색이 주황색
+(#FF9900)인지로 한다 — 사용자가 확인해준 실제 기준. 텍스트는 그대로
+"입금확인중"일 수 있지만, 색이 곧 처리 대상 표시이므로 색만 본다.
+
 이 모듈이 다루는 값(회원명/이메일/계좌정보)은 개인정보이므로, 여기서 읽은
 결과는 화면에 표로 보여주는 용도로만 쓰고 그 외 외부로 전송/기록하지 않는다.
 """
@@ -14,13 +18,19 @@ import re
 
 import gspread
 from google.oauth2.service_account import Credentials
+from gspread.utils import rowcol_to_a1
 
 from .. import config
 from .bank_format import format_account_number
 
 SECTION_TITLE = "계좌 환불 (차액 환불 가능)"
 STATUS_HEADER_CANDIDATES = ["처리유무", "처리 유무", "처리상태", "처리 상태"]
-TARGET_STATUS = "입금확인중"
+
+# 처리 대상 표시 색(#FF9900)과 셀 실제 배경색을 대조할 때 허용할 오차.
+# 구글시트가 값을 0~1 사이 실수로 저장/반환하면서 미세한 반올림 차이가
+# 생길 수 있어 약간의 허용 범위를 둔다.
+TARGET_COLOR_HEX = "FF9900"
+COLOR_TOLERANCE = 0.05
 
 NAME_HEADER_CANDIDATES = ["회원 이름", "회원명", "이름"]
 EMAIL_HEADER_CANDIDATES = ["ID", "이메일", "회원 ID", "회원 이메일"]
@@ -41,6 +51,65 @@ def _get_worksheet():
     client = gspread.authorize(creds)
     sheet = client.open_by_key(config.REFUND_SHEET_ID)
     return sheet.get_worksheet(0)
+
+
+def _hex_to_rgb01(hex_color: str) -> tuple[float, float, float]:
+    hex_color = hex_color.lstrip("#")
+    return (
+        int(hex_color[0:2], 16) / 255,
+        int(hex_color[2:4], 16) / 255,
+        int(hex_color[4:6], 16) / 255,
+    )
+
+
+def _is_target_color(color: dict | None) -> bool:
+    if not color:
+        return False
+    target_r, target_g, target_b = _hex_to_rgb01(TARGET_COLOR_HEX)
+    return (
+        abs(color.get("red", 0) - target_r) <= COLOR_TOLERANCE
+        and abs(color.get("green", 0) - target_g) <= COLOR_TOLERANCE
+        and abs(color.get("blue", 0) - target_b) <= COLOR_TOLERANCE
+    )
+
+
+def _fetch_background_colors(worksheet, num_rows: int, num_cols: int) -> list[list[dict | None]]:
+    """all_values와 같은 범위(A1부터)의 셀 배경색을, all_values와 같은 행/열
+    인덱스로 대응되는 2차원 리스트로 가져온다. 값이 없는 셀은 API가 응답에서
+    아예 생략하기도 해서 행/칸별로 길이가 짧을 수 있다 (호출부에서 bounds
+    체크 필요)."""
+    if num_rows == 0 or num_cols == 0:
+        return []
+
+    end_a1 = rowcol_to_a1(num_rows, num_cols)
+    a1_range = f"'{worksheet.title}'!A1:{end_a1}"
+    metadata = worksheet.spreadsheet.fetch_sheet_metadata(
+        params={
+            "ranges": a1_range,
+            "fields": (
+                "sheets.data.rowData.values.effectiveFormat.backgroundColor,"
+                "sheets.data.rowData.values.userEnteredFormat.backgroundColor"
+            ),
+        }
+    )
+
+    sheets_data = metadata.get("sheets") or []
+    if not sheets_data:
+        return []
+    data_blocks = sheets_data[0].get("data") or []
+    if not data_blocks:
+        return []
+    row_data = data_blocks[0].get("rowData") or []
+
+    colors: list[list[dict | None]] = []
+    for row in row_data:
+        row_colors = []
+        for cell in row.get("values", []):
+            effective = cell.get("effectiveFormat", {}).get("backgroundColor")
+            entered = cell.get("userEnteredFormat", {}).get("backgroundColor")
+            row_colors.append(effective or entered)
+        colors.append(row_colors)
+    return colors
 
 
 def _find_header_index(headers: list[str], candidates: list[str]) -> int | None:
@@ -85,8 +154,9 @@ def _parse_account_info(raw_text: str) -> dict:
 
 
 def fetch_pending_refunds() -> list[dict]:
-    """"계좌 환불 (차액 환불 가능)" 섹션에서 처리유무=="입금확인중"인 행만 골라
-    회원명/이메일/환불금액/계좌정보(파싱 + 은행별 대시 포맷)로 정리해 반환한다."""
+    """"계좌 환불 (차액 환불 가능)" 섹션에서 "처리유무" 칸이 주황색(#FF9900)인
+    행만 골라 회원명/이메일/환불금액/계좌정보(파싱 + 은행별 대시 포맷)로
+    정리해 반환한다."""
     worksheet = _get_worksheet()
     all_values = worksheet.get_all_values()
 
@@ -112,15 +182,19 @@ def fetch_pending_refunds() -> list[dict]:
     if status_idx is None:
         raise ValueError(f'헤더에서 "처리유무" 컬럼을 찾지 못했습니다. 헤더: {headers}')
 
+    num_cols = max((len(row) for row in all_values), default=0)
+    colors = _fetch_background_colors(worksheet, len(all_values), num_cols)
+
     results: list[dict] = []
-    for row in all_values[header_row_idx + 1 :]:
+    for row_idx, row in enumerate(all_values[header_row_idx + 1 :], start=header_row_idx + 1):
         if not any(cell.strip() for cell in row):
             break  # 빈 행 = 섹션 끝
         if any(cell.strip() == SECTION_TITLE for cell in row):
             break  # 다음 섹션 시작
 
-        status = row[status_idx].strip() if status_idx < len(row) else ""
-        if status != TARGET_STATUS:
+        row_colors = colors[row_idx] if row_idx < len(colors) else []
+        status_color = row_colors[status_idx] if status_idx < len(row_colors) else None
+        if not _is_target_color(status_color):
             continue
 
         # 계좌정보 칸은 헤더명이 통일돼 있지 않을 수 있어(개인정보라 자유

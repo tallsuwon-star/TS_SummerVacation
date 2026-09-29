@@ -1,8 +1,8 @@
 """환불(계좌 환불) 지출결의서 대상 조회 job.
 
-구글 시트의 "계좌 환불 (차액 환불 가능)" 섹션에서 처리유무=="입금확인중"인
-행만 읽어와 회원명/이메일/환불금액/계좌정보(은행별 '-' 포맷)로 화면에 표로
-보여준다. 셀레니움 없이 구글 시트 API만 호출하므로 빠르게 끝난다.
+구글 시트의 "계좌 환불 (차액 환불 가능)" 섹션에서 "처리유무" 칸이 주황색
+(#FF9900)인 행만 읽어와 회원명/이메일/환불금액/계좌정보(은행별 '-' 포맷)로
+화면에 표로 보여준다. 셀레니움 없이 구글 시트 API만 호출하므로 빠르게 끝난다.
 """
 
 from .. import config
@@ -28,7 +28,7 @@ def run(job_payload: dict, control: ControlState) -> None:
         emit_done({"success": False, "error": str(exc)})
         return
 
-    emit_log(f'"입금확인중" 상태인 환불 대상 {len(refunds)}건을 찾았습니다.')
+    emit_log(f'"처리유무"가 주황색으로 표시된 환불 대상 {len(refunds)}건을 찾았습니다.')
     for refund in refunds:
         if refund["needsReview"]:
             emit_log(
