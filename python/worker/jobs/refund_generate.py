@@ -4,12 +4,14 @@
 떠 있는) refunds 목록을 그대로 받아 파일로 만든다 — 화면에 보인 것과
 실제로 생성되는 파일 내용이 어긋나지 않게 하기 위함이다.
 
-생성된 파일은 로컬(data/refund/output/)에만 저장하고 git에는 올리지 않는다.
+생성된 파일은 곧바로 사용자의 실제 "다운로드" 폴더(Path.home() / "Downloads")에
+저장한다 — 일렉트론 쪽의 저장 대화상자/탐색기 열기에 의존하지 않고 파이썬이
+직접 써서, 그 파일을 바로 찾아 쓸 수 있게 한다. git에는 올라가지 않는다.
 """
 
 from datetime import date
+from pathlib import Path
 
-from .. import config
 from ..control import ControlState
 from ..refund.xlsx_writer import generate_expense_forms
 from ..utils.progress import emit_done, emit_log
@@ -29,7 +31,7 @@ def run(job_payload: dict, control: ControlState) -> None:
         emit_done({"success": False, "error": "missing-preparer-name"})
         return
 
-    output_dir = config.DATA_DIR / "refund" / "output"
+    output_dir = Path.home() / "Downloads"
 
     try:
         output_paths = generate_expense_forms(refunds, preparer_name, output_dir, document_date=date.today())
@@ -39,6 +41,6 @@ def run(job_payload: dict, control: ControlState) -> None:
         return
 
     for path in output_paths:
-        emit_log(f"생성 완료: {path.name}")
+        emit_log(f"다운로드 폴더에 저장 완료: {path}")
 
     emit_done({"success": True, "outputPaths": [str(p) for p in output_paths]})

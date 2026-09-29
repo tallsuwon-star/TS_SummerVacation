@@ -10,7 +10,7 @@
 """
 
 import re
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import openpyxl
@@ -69,10 +69,14 @@ def generate_expense_forms(
         refunds[i : i + MAX_SLOTS_PER_SHEET] for i in range(0, len(refunds), MAX_SLOTS_PER_SHEET)
     ] or [[]]
 
+    # 같은 날짜에 여러 번 생성해도(재시도 등) 파일명이 겹쳐 덮어써지지 않도록
+    # 시:분:초까지 붙인다.
+    time_tag = datetime.now().strftime("%H%M%S")
+
     output_paths: list[Path] = []
     for chunk_idx, chunk in enumerate(chunks, start=1):
         suffix = f"_{chunk_idx}" if len(chunks) > 1 else ""
-        filename = f"지출결의서_{document_date.strftime('%Y%m%d')}{suffix}.xlsx"
+        filename = f"지출결의서_{document_date.strftime('%Y%m%d')}_{time_tag}{suffix}.xlsx"
         output_path = output_dir / filename
         _write_single_form(chunk, preparer_name, document_date, output_path)
         output_paths.append(output_path)

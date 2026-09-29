@@ -32,9 +32,6 @@ function registerIpcHandlers(mainWindow) {
   ipcMain.handle('report:getOfficeReports', () => officeReports.getLatestReports());
   ipcMain.handle('report:tidyText', (_event, rawText) => anthropicClient.tidyText(rawText));
 
-  ipcMain.handle('file:saveAs', (_event, { sourcePath, suggestedName }) =>
-    fileSave.saveFileAs(mainWindow, sourcePath, suggestedName)
-  );
   ipcMain.handle('file:reveal', (_event, sourcePath) => fileSave.revealFile(sourcePath));
 }
 
