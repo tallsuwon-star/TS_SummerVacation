@@ -6,7 +6,7 @@ const ALL_JOBS = [
   { id: 'vocaking_report', label: '보카킹 보고' },
   { id: 'naver_store_report', label: '네이버 스토어' },
   { id: 'work_report', label: '업무보고' },
-  { id: 'refund_fetch', label: '환불 지출결의서' },
+  { id: 'refund_fetch', label: '환불/카드취소' },
 ];
 
 const INSTALL_CHECKS = [{ id: 'selenium', label: 'Selenium' }];

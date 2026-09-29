@@ -10,6 +10,7 @@ for _stream in (sys.stdin, sys.stdout, sys.stderr):
 
 from .control import ControlState
 from .jobs import (
+    card_cancel_open_consult,
     login_test,
     morning_special_stats,
     naver_store_report,
@@ -35,6 +36,7 @@ JOBS = {
     "office_report_submit": office_report_submit.run,
     "refund_fetch": refund_fetch.run,
     "refund_generate": refund_generate.run,
+    "card_cancel_open_consult": card_cancel_open_consult.run,
 }
 
 

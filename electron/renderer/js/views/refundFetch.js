@@ -1,7 +1,48 @@
 function renderRefundFetchView(container) {
   container.innerHTML = `
     <div class="view-header">
-      <h1>환불 지출결의서</h1>
+      <h1>환불/카드취소</h1>
+    </div>
+
+    <div class="job-controls" style="margin-bottom: 12px;">
+      <button id="tab-refund-btn" class="btn btn-primary">환불</button>
+      <button id="tab-card-cancel-btn" class="btn btn-ghost">카드취소</button>
+    </div>
+
+    <div id="refund-tab-panel"></div>
+    <div id="card-cancel-tab-panel" hidden></div>
+  `;
+
+  const refundTabBtn = document.getElementById('tab-refund-btn');
+  const cardCancelTabBtn = document.getElementById('tab-card-cancel-btn');
+  const refundPanelEl = document.getElementById('refund-tab-panel');
+  const cardCancelPanelEl = document.getElementById('card-cancel-tab-panel');
+
+  const refundPanel = buildRefundPanel(refundPanelEl);
+  const cardCancelPanel = buildCardCancelPanel(cardCancelPanelEl);
+
+  function activateTab(tab) {
+    const isRefund = tab === 'refund';
+    refundTabBtn.className = `btn ${isRefund ? 'btn-primary' : 'btn-ghost'}`;
+    cardCancelTabBtn.className = `btn ${!isRefund ? 'btn-primary' : 'btn-ghost'}`;
+    refundPanelEl.hidden = !isRefund;
+    cardCancelPanelEl.hidden = isRefund;
+    // job:log/record/done 리스너는 프리로드에서 채널당 하나만 유지되므로,
+    // 현재 보이는 탭의 콜백으로 매번 다시 등록해준다.
+    if (isRefund) refundPanel.attachListeners();
+    else cardCancelPanel.attachListeners();
+  }
+
+  refundTabBtn.addEventListener('click', () => activateTab('refund'));
+  cardCancelTabBtn.addEventListener('click', () => activateTab('card-cancel'));
+
+  activateTab('refund');
+}
+
+// ---- 환불 탭 (기존 지출결의서 조회/생성 기능 그대로) ----
+function buildRefundPanel(container) {
+  container.innerHTML = `
+    <div class="view-header">
       <div class="job-controls">
         <button id="start-btn" class="btn btn-primary">조회 시작</button>
       </div>
@@ -63,16 +104,16 @@ function renderRefundFetchView(container) {
     </section>
   `;
 
-  const startBtn = document.getElementById('start-btn');
-  const generateBtn = document.getElementById('generate-btn');
-  const preparerNameInput = document.getElementById('refund-preparer-name');
-  const tableBody = document.getElementById('refund-table-body');
-  const refundSearchInput = document.getElementById('refund-search');
-  const refundSearchCount = document.getElementById('refund-search-count');
+  const startBtn = container.querySelector('#start-btn');
+  const generateBtn = container.querySelector('#generate-btn');
+  const preparerNameInput = container.querySelector('#refund-preparer-name');
+  const tableBody = container.querySelector('#refund-table-body');
+  const refundSearchInput = container.querySelector('#refund-search');
+  const refundSearchCount = container.querySelector('#refund-search-count');
 
-  const logOutput = document.getElementById('log-output');
-  const logSearchInput = document.getElementById('log-search');
-  const logSearchCount = document.getElementById('log-search-count');
+  const logOutput = container.querySelector('#log-output');
+  const logSearchInput = container.querySelector('#log-search');
+  const logSearchCount = container.querySelector('#log-search-count');
 
   (async () => {
     const settings = await window.api.getSettings();
@@ -232,35 +273,159 @@ function renderRefundFetchView(container) {
     generateBtn.disabled = true;
   });
 
-  window.api.onJobLog((data) => {
-    appendLog(data.level || 'info', data.message || '');
-  });
+  function attachListeners() {
+    window.api.onJobLog((data) => {
+      appendLog(data.level || 'info', data.message || '');
+    });
 
-  window.api.onJobRecord((data) => {
-    if (data.kind !== 'refund' || !data.refund) return;
-    refunds.push(data.refund);
-    renderTable();
-  });
+    window.api.onJobRecord((data) => {
+      if (data.kind !== 'refund' || !data.refund) return;
+      refunds.push(data.refund);
+      renderTable();
+    });
 
-  window.api.onJobDone(async (data) => {
-    if (typeof data.code === 'undefined') {
-      if (currentJobId === 'refund_generate' && data.outputPaths) {
-        for (const outputPath of data.outputPaths) {
-          appendLog('info', `다운로드 폴더에 저장됨: ${outputPath}`);
-          // 파이썬이 이미 다운로드 폴더에 파일을 직접 저장했으니, 탐색기로
-          // 위치를 열어주는 것은 확인 차원의 보조 동작일 뿐이다 (실패해도
-          // 파일 자체는 이미 다운로드 폴더에 있다).
-          window.api.revealFile(outputPath).catch(() => {});
+    window.api.onJobDone(async (data) => {
+      if (typeof data.code === 'undefined') {
+        if (currentJobId === 'refund_generate' && data.outputPaths) {
+          for (const outputPath of data.outputPaths) {
+            appendLog('info', `다운로드 폴더에 저장됨: ${outputPath}`);
+            // 파이썬이 이미 다운로드 폴더에 파일을 직접 저장했으니, 탐색기로
+            // 위치를 열어주는 것은 확인 차원의 보조 동작일 뿐이다 (실패해도
+            // 파일 자체는 이미 다운로드 폴더에 있다).
+            window.api.revealFile(outputPath).catch(() => {});
+          }
         }
+        return;
       }
+
+      appendLog('info', `작업 프로세스 종료 (종료 코드: ${data.code})`);
+      startBtn.disabled = false;
+      updateGenerateButtonState();
+      currentJobId = null;
+    });
+  }
+
+  return { attachListeners };
+}
+
+// ---- 카드취소 탭 (이메일로 회원 검색 -> LMS 상담관리 화면 자동으로 열기) ----
+function buildCardCancelPanel(container) {
+  container.innerHTML = `
+    <section class="panel">
+      <div class="field-label">
+        카드 전액취소 전, 구글 시트에 적힌 내용과 회원의 실제 상담관리 기록
+        (요청자 일치 여부, 영수증 첨부 여부, 처리 사유)이 서로 맞는지 눈으로
+        대조해야 합니다. 아래에 시트의 D열(회원 이메일/ID)을 입력하면 LMS에
+        로그인해서 해당 회원의 상담관리 화면까지 자동으로 열어줍니다.
+      </div>
+      <div class="checkbox-row">
+        <label for="card-cancel-email">회원 이메일(ID)</label>
+        <input type="text" id="card-cancel-email" placeholder="예: xiaoguai@naver.com" />
+      </div>
+      <div class="job-controls">
+        <button id="card-cancel-open-btn" class="btn btn-primary">상담관리 화면 열기</button>
+        <button id="card-cancel-stop-btn" class="btn btn-danger" disabled>확인 종료</button>
+      </div>
+      <div class="field-label">
+        버튼을 누르면 크롬 창이 열리고 LMS 로그인 후 해당 회원의 상담관리
+        화면까지 자동으로 이동합니다. 확인이 끝나면 "확인 종료"를 눌러
+        브라우저를 닫아주세요.
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="field-label login-test-label">실행 로그</div>
+      <div class="log-toolbar">
+        <input type="text" id="card-cancel-log-search" class="roster-search-input" placeholder="로그 검색... (일치하는 줄만 표시)" />
+        <span id="card-cancel-log-search-count" class="tutor-roster-count"></span>
+      </div>
+      <div id="card-cancel-log-output" class="log-output"></div>
+    </section>
+  `;
+
+  const emailInput = container.querySelector('#card-cancel-email');
+  const openBtn = container.querySelector('#card-cancel-open-btn');
+  const stopBtn = container.querySelector('#card-cancel-stop-btn');
+
+  const logOutput = container.querySelector('#card-cancel-log-output');
+  const logSearchInput = container.querySelector('#card-cancel-log-search');
+  const logSearchCount = container.querySelector('#card-cancel-log-search-count');
+
+  let logSearchQuery = '';
+
+  function applyLogLineVisibility(line) {
+    const matches = !logSearchQuery || line.textContent.toLowerCase().includes(logSearchQuery);
+    line.hidden = !matches;
+  }
+
+  function updateLogSearchCount() {
+    if (!logSearchQuery) {
+      logSearchCount.textContent = '';
+      return;
+    }
+    const total = logOutput.children.length;
+    const shown = logOutput.querySelectorAll('.log-line:not([hidden])').length;
+    logSearchCount.textContent = `${shown} / ${total}줄 일치`;
+  }
+
+  logSearchInput.addEventListener('input', () => {
+    logSearchQuery = logSearchInput.value.trim().toLowerCase();
+    Array.from(logOutput.children).forEach(applyLogLineVisibility);
+    updateLogSearchCount();
+  });
+
+  function appendLog(level, message) {
+    const line = document.createElement('div');
+    line.className = `log-line log-line-${level}`;
+    line.textContent = message;
+    applyLogLineVisibility(line);
+    logOutput.appendChild(line);
+    if (!line.hidden) {
+      logOutput.scrollTop = logOutput.scrollHeight;
+    }
+    updateLogSearchCount();
+  }
+
+  openBtn.addEventListener('click', async () => {
+    const memberEmail = emailInput.value.trim();
+    if (!memberEmail) {
+      alert('회원 이메일(ID)을 입력해주세요.');
       return;
     }
 
-    appendLog('info', `작업 프로세스 종료 (종료 코드: ${data.code})`);
-    startBtn.disabled = false;
-    updateGenerateButtonState();
-    currentJobId = null;
+    logOutput.innerHTML = '';
+
+    const result = await window.api.startJob({ jobId: 'card_cancel_open_consult', memberEmail });
+    if (!result.started) {
+      alert('이미 실행 중인 작업이 있습니다.');
+      return;
+    }
+
+    openBtn.disabled = true;
+    stopBtn.disabled = false;
   });
+
+  stopBtn.addEventListener('click', async () => {
+    await window.api.stopJob();
+    stopBtn.disabled = true;
+  });
+
+  function attachListeners() {
+    window.api.onJobLog((data) => {
+      appendLog(data.level || 'info', data.message || '');
+    });
+
+    window.api.onJobRecord(() => {});
+
+    window.api.onJobDone((data) => {
+      if (typeof data.code === 'undefined') return;
+      appendLog('info', `작업 프로세스 종료 (종료 코드: ${data.code})`);
+      openBtn.disabled = false;
+      stopBtn.disabled = true;
+    });
+  }
+
+  return { attachListeners };
 }
 
 window.renderRefundFetchView = renderRefundFetchView;
