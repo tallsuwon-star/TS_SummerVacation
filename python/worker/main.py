@@ -12,6 +12,7 @@ from .control import ControlState
 from .jobs import (
     card_cancel_fetch,
     card_cancel_open_consult,
+    expense_write,
     login_test,
     morning_special_stats,
     naver_store_report,
@@ -39,6 +40,7 @@ JOBS = {
     "refund_generate": refund_generate.run,
     "card_cancel_open_consult": card_cancel_open_consult.run,
     "card_cancel_fetch": card_cancel_fetch.run,
+    "expense_write": expense_write.run,
 }
 
 

@@ -7,34 +7,42 @@ function renderRefundFetchView(container) {
     <div class="job-controls" style="margin-bottom: 12px;">
       <button id="tab-refund-btn" class="btn btn-primary">환불</button>
       <button id="tab-card-cancel-btn" class="btn btn-ghost">카드취소</button>
+      <button id="tab-expense-write-btn" class="btn btn-ghost">지출결의서 자동입력</button>
     </div>
 
     <div id="refund-tab-panel"></div>
     <div id="card-cancel-tab-panel" hidden></div>
+    <div id="expense-write-tab-panel" hidden></div>
   `;
 
   const refundTabBtn = document.getElementById('tab-refund-btn');
   const cardCancelTabBtn = document.getElementById('tab-card-cancel-btn');
+  const expenseWriteTabBtn = document.getElementById('tab-expense-write-btn');
   const refundPanelEl = document.getElementById('refund-tab-panel');
   const cardCancelPanelEl = document.getElementById('card-cancel-tab-panel');
+  const expenseWritePanelEl = document.getElementById('expense-write-tab-panel');
 
   const refundPanel = buildRefundPanel(refundPanelEl);
   const cardCancelPanel = buildCardCancelPanel(cardCancelPanelEl);
+  const expenseWritePanel = buildExpenseWritePanel(expenseWritePanelEl);
 
   function activateTab(tab) {
-    const isRefund = tab === 'refund';
-    refundTabBtn.className = `btn ${isRefund ? 'btn-primary' : 'btn-ghost'}`;
-    cardCancelTabBtn.className = `btn ${!isRefund ? 'btn-primary' : 'btn-ghost'}`;
-    refundPanelEl.hidden = !isRefund;
-    cardCancelPanelEl.hidden = isRefund;
+    refundTabBtn.className = `btn ${tab === 'refund' ? 'btn-primary' : 'btn-ghost'}`;
+    cardCancelTabBtn.className = `btn ${tab === 'card-cancel' ? 'btn-primary' : 'btn-ghost'}`;
+    expenseWriteTabBtn.className = `btn ${tab === 'expense-write' ? 'btn-primary' : 'btn-ghost'}`;
+    refundPanelEl.hidden = tab !== 'refund';
+    cardCancelPanelEl.hidden = tab !== 'card-cancel';
+    expenseWritePanelEl.hidden = tab !== 'expense-write';
     // job:log/record/done 리스너는 프리로드에서 채널당 하나만 유지되므로,
     // 현재 보이는 탭의 콜백으로 매번 다시 등록해준다.
-    if (isRefund) refundPanel.attachListeners();
-    else cardCancelPanel.attachListeners();
+    if (tab === 'refund') refundPanel.attachListeners();
+    else if (tab === 'card-cancel') cardCancelPanel.attachListeners();
+    else expenseWritePanel.attachListeners();
   }
 
   refundTabBtn.addEventListener('click', () => activateTab('refund'));
   cardCancelTabBtn.addEventListener('click', () => activateTab('card-cancel'));
+  expenseWriteTabBtn.addEventListener('click', () => activateTab('expense-write'));
 
   activateTab('refund');
 }
@@ -687,6 +695,95 @@ function buildCardCancelPanel(container) {
       manualOpenBtn.disabled = false;
       stopBtn.disabled = true;
       updateActionButtonsState();
+    });
+  }
+
+  return { attachListeners };
+}
+
+// ---- 지출결의서 자동입력 탭 (사용자가 검수한 지출결의서 엑셀을 읽어
+// office.talkstation.co.kr 지출결의서 작성 화면에 거래처/상세/거래금액을
+// 자동으로 입력. "제출하기"는 절대 누르지 않고 사용자가 직접 확인 후 제출) ----
+function buildExpenseWritePanel(container) {
+  container.innerHTML = `
+    <div class="view-header">
+      <div class="job-controls">
+        <input type="file" id="ew-file-input" accept=".xlsx" />
+        <button id="ew-start-btn" class="btn btn-primary" disabled>작성 시작</button>
+        <button id="ew-stop-btn" class="btn btn-danger" disabled>중단</button>
+      </div>
+    </div>
+
+    <section class="panel">
+      <div class="field-label">
+        오늘 처리한 환불 건을 정리해둔 지출결의서 엑셀 파일을 선택하면, 크롬
+        창을 열어 office.talkstation.co.kr의 "지출결의서 작성" 화면에
+        회원별로 거래처(회원명)/상세(사유 및 계좌정보)/거래금액을 순서대로
+        입력해줍니다. 날짜는 오늘 날짜로 채워집니다.
+        <b>"제출하기"는 절대 누르지 않으니, 화면에서 직접 내용을 확인한 뒤
+        본인이 눌러 제출해주세요.</b> 입력이 끝나도 브라우저는 그대로
+        열려있으니, 확인이 끝나면 "중단"을 눌러 종료해주세요.
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="field-label login-test-label">실행 로그</div>
+      <div id="ew-log-output" class="log-output"></div>
+    </section>
+  `;
+
+  const fileInput = container.querySelector('#ew-file-input');
+  const startBtn = container.querySelector('#ew-start-btn');
+  const stopBtn = container.querySelector('#ew-stop-btn');
+  const logOutput = container.querySelector('#ew-log-output');
+
+  let selectedFilePath = null;
+
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files && fileInput.files[0];
+    selectedFilePath = file ? window.api.getPathForFile(file) : null;
+    startBtn.disabled = !selectedFilePath;
+  });
+
+  function appendLog(level, message) {
+    const line = document.createElement('div');
+    line.className = `log-line log-line-${level}`;
+    line.textContent = message;
+    logOutput.appendChild(line);
+    logOutput.scrollTop = logOutput.scrollHeight;
+  }
+
+  startBtn.addEventListener('click', async () => {
+    if (!selectedFilePath) return;
+    logOutput.innerHTML = '';
+
+    const result = await window.api.startJob({ jobId: 'expense_write', filePath: selectedFilePath });
+    if (!result.started) {
+      alert('이미 실행 중인 작업이 있습니다.');
+      return;
+    }
+
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+  });
+
+  stopBtn.addEventListener('click', async () => {
+    await window.api.stopJob();
+    stopBtn.disabled = true;
+  });
+
+  function attachListeners() {
+    window.api.onJobLog((data) => {
+      appendLog(data.level || 'info', data.message || '');
+    });
+
+    window.api.onJobRecord(() => {});
+
+    window.api.onJobDone((data) => {
+      if (typeof data.code === 'undefined') return;
+      appendLog('info', `작업 프로세스 종료 (종료 코드: ${data.code})`);
+      startBtn.disabled = !selectedFilePath;
+      stopBtn.disabled = true;
     });
   }
 
