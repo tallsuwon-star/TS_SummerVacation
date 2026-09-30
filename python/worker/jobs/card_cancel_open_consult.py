@@ -29,7 +29,12 @@ JOB_NAME = "card_cancel_open_consult"
 
 def run(job_payload: dict, control: ControlState) -> None:
     targets = [
-        {"memberEmail": (t.get("memberEmail") or "").strip(), "memberName": t.get("memberName") or "", "requester": (t.get("requester") or "").strip()}
+        {
+            "memberEmail": (t.get("memberEmail") or "").strip(),
+            "memberName": t.get("memberName") or "",
+            "requester": (t.get("requester") or "").strip(),
+            "refundAmount": t.get("refundAmount") or "",
+        }
         for t in (job_payload.get("targets") or [])
         if (t.get("memberEmail") or "").strip()
     ]
@@ -68,7 +73,7 @@ def run(job_payload: dict, control: ControlState) -> None:
                 continue
 
             try:
-                receipts = check_card_cancel_receipts(driver, requester)
+                receipts = check_card_cancel_receipts(driver, requester, target["refundAmount"])
             except ReceiptCheckError as exc:
                 emit_log(f"  ⚠ 매출전표 확인 중 오류: {exc}", level="error")
                 continue

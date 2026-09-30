@@ -374,13 +374,10 @@ function buildCardCancelPanel(container) {
             <th>회원명</th>
             <th>이메일</th>
             <th>요청자</th>
-            <th>등록일</th>
-            <th>결제시간(거래일자)</th>
-            <th>구매자명</th>
+            <th>결제시간(거래일)</th>
             <th>상품정보</th>
-            <th>승인번호</th>
-            <th>개인메모</th>
-            <th>상태</th>
+            <th>메모</th>
+            <th>비고</th>
             <th>링크</th>
           </tr>
         </thead>
@@ -567,11 +564,14 @@ function buildCardCancelPanel(container) {
 
     receiptTableBody.innerHTML = sorted
       .map((r) => {
-        const statusBadge = r.needsReview
-          ? '<span class="status-badge status-failed">확인 필요</span>'
-          : '<span class="status-badge status-success">확인됨</span>';
-        const reason = r.needsReview && r.reviewReason ? `<br><small>${escapeHtml(r.reviewReason)}</small>` : '';
         const fields = r.receiptFields || {};
+        const verdict = r.matchVerdict || (r.needsReview ? '확인 필요' : '-');
+        const verdictClass =
+          verdict === '일치' ? 'status-success' : verdict === '불일치' ? 'status-failed' : 'status-processing';
+        const verdictNote = r.matchNote ? `<br><small>${escapeHtml(r.matchNote)}</small>` : '';
+        const reviewReason =
+          r.needsReview && r.reviewReason ? `<br><small>${escapeHtml(r.reviewReason)}</small>` : '';
+        const remarks = `<span class="status-badge ${verdictClass}">${escapeHtml(verdict)}</span>${verdictNote}${reviewReason}`;
         const link = r.detailUrl
           ? `<button type="button" class="btn btn-ghost cc-open-link" data-url="${escapeHtml(r.detailUrl)}">열기</button>`
           : '-';
@@ -580,13 +580,10 @@ function buildCardCancelPanel(container) {
             <td>${escapeHtml(r.memberName) || '-'}</td>
             <td>${escapeHtml(r.memberEmail) || '-'}</td>
             <td>${escapeHtml(r.requester) || '-'}</td>
-            <td>${escapeHtml(r.registeredDate) || '-'}</td>
             <td>${escapeHtml(fields['거래일자']) || '-'}</td>
-            <td>${escapeHtml(fields['구매자']) || '-'}</td>
             <td>${escapeHtml(fields['상품명']) || '-'}</td>
-            <td>${escapeHtml(fields['승인번호']) || '-'}</td>
             <td>${escapeHtml(r.personalNote) || '-'}</td>
-            <td>${statusBadge}${reason}</td>
+            <td>${remarks}</td>
             <td>${link}</td>
           </tr>
         `;
@@ -642,7 +639,12 @@ function buildCardCancelPanel(container) {
     }
     const targets = cardCancels
       .filter((c) => checkedEmails.has(c.memberEmail))
-      .map((c) => ({ memberEmail: c.memberEmail, memberName: c.memberName, requester: c.requester }));
+      .map((c) => ({
+        memberEmail: c.memberEmail,
+        memberName: c.memberName,
+        requester: c.requester,
+        refundAmount: c.refundAmount,
+      }));
     startConsultJob(targets);
   });
 
