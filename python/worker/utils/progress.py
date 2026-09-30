@@ -39,5 +39,11 @@ def emit_card_cancel_record(card_cancel: dict) -> None:
     emit({"type": "record", "kind": "card_cancel", "cardCancel": card_cancel})
 
 
+def emit_receipt_check_record(receipt_check: dict) -> None:
+    """매출전표 대조 결과 한 건이 확정될 때마다 즉시 화면 표에 반영할 수
+    있도록 스트리밍."""
+    emit({"type": "record", "kind": "receipt_check", "receiptCheck": receipt_check})
+
+
 def emit_done(summary: dict) -> None:
     emit({"type": "done", "summary": summary})

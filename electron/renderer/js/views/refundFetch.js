@@ -325,7 +325,10 @@ function buildCardCancelPanel(container) {
         적힌 내용과 회원의 실제 상담관리 기록(요청자 일치 여부, 영수증 첨부
         여부, 처리 사유)이 서로 맞는지 확인이 필요한 회원을 체크한 뒤
         "선택한 회원 상담관리 열기"를 누르면 LMS에 로그인해서 각 회원의
-        상담관리 화면을 자동으로 열어줍니다.
+        상담관리 화면을 열고, 요청자 이름이 같고 최근 7일 이내 작성된 상담
+        내용을 찾아 그 안의 신용카드 매출전표(결제시간/구매자명/상품정보)를
+        아래에 표로 정리해줍니다. 자동으로 확인이 안 된 건은 반드시 "확인
+        필요"로 표시되니, 그 경우는 링크를 열어 직접 대조해주세요.
       </div>
       <div class="log-toolbar">
         <input type="text" id="cc-search" class="roster-search-input" placeholder="회원명/이메일 검색..." />
@@ -358,11 +361,42 @@ function buildCardCancelPanel(container) {
       </div>
     </section>
 
+    <section class="panel" id="cc-receipt-panel" hidden>
+      <div class="field-label">
+        체크한 회원의 상담관리 화면에서, 요청자 이름이 같고 최근 7일 이내
+        작성된 상담 내용을 찾아 그 안의 신용카드 매출전표를 읽어온 결과입니다.
+        <b>"확인 필요"로 표시된 건은 자동으로 확인이 안 된 것이니 URL을 직접
+        열어 반드시 눈으로 대조해주세요.</b>
+      </div>
+      <table class="dashboard-table" id="cc-receipt-table">
+        <thead>
+          <tr>
+            <th>회원명</th>
+            <th>이메일</th>
+            <th>요청자</th>
+            <th>등록일</th>
+            <th>결제시간(거래일자)</th>
+            <th>구매자명</th>
+            <th>상품정보</th>
+            <th>승인번호</th>
+            <th>개인메모</th>
+            <th>상태</th>
+            <th>링크</th>
+          </tr>
+        </thead>
+        <tbody id="cc-receipt-table-body"></tbody>
+      </table>
+    </section>
+
     <section class="panel">
       <div class="field-label">직접 이메일로 확인</div>
       <div class="checkbox-row">
         <label for="cc-manual-email">회원 이메일(ID)</label>
         <input type="text" id="cc-manual-email" placeholder="예: xiaoguai@naver.com" />
+      </div>
+      <div class="checkbox-row">
+        <label for="cc-manual-requester">요청자 이름 (시트의 요청자, 매출전표 대조용, 생략 가능)</label>
+        <input type="text" id="cc-manual-requester" placeholder="예: 김지윤" />
       </div>
       <div class="job-controls">
         <button id="cc-manual-open-btn" class="btn btn-ghost">상담관리 화면 열기</button>
@@ -390,7 +424,10 @@ function buildCardCancelPanel(container) {
   const openConsultBtn = container.querySelector('#cc-open-consult-btn');
   const stopBtn = container.querySelector('#cc-stop-btn');
   const manualEmailInput = container.querySelector('#cc-manual-email');
+  const manualRequesterInput = container.querySelector('#cc-manual-requester');
   const manualOpenBtn = container.querySelector('#cc-manual-open-btn');
+  const receiptPanel = container.querySelector('#cc-receipt-panel');
+  const receiptTableBody = container.querySelector('#cc-receipt-table-body');
 
   const logOutput = container.querySelector('#cc-log-output');
   const logSearchInput = container.querySelector('#cc-log-search');
@@ -516,12 +553,61 @@ function buildCardCancelPanel(container) {
     renderTable();
   });
 
+  // ---- 매출전표 대조 결과 (회원별로 묶어서 표시) ----
+  let receiptChecks = []; // { memberName, memberEmail, requester, found, needsReview, reviewReason, ... }
+
+  function renderReceiptTable() {
+    if (receiptChecks.length === 0) {
+      receiptPanel.hidden = true;
+      return;
+    }
+    receiptPanel.hidden = false;
+
+    const sorted = [...receiptChecks].sort((a, b) => (a.memberEmail || '').localeCompare(b.memberEmail || ''));
+
+    receiptTableBody.innerHTML = sorted
+      .map((r) => {
+        const statusBadge = r.needsReview
+          ? '<span class="status-badge status-failed">확인 필요</span>'
+          : '<span class="status-badge status-success">확인됨</span>';
+        const reason = r.needsReview && r.reviewReason ? `<br><small>${escapeHtml(r.reviewReason)}</small>` : '';
+        const fields = r.receiptFields || {};
+        const link = r.detailUrl
+          ? `<button type="button" class="btn btn-ghost cc-open-link" data-url="${escapeHtml(r.detailUrl)}">열기</button>`
+          : '-';
+        return `
+          <tr class="${r.needsReview ? 'row-failed' : ''}">
+            <td>${escapeHtml(r.memberName) || '-'}</td>
+            <td>${escapeHtml(r.memberEmail) || '-'}</td>
+            <td>${escapeHtml(r.requester) || '-'}</td>
+            <td>${escapeHtml(r.registeredDate) || '-'}</td>
+            <td>${escapeHtml(fields['거래일자']) || '-'}</td>
+            <td>${escapeHtml(fields['구매자']) || '-'}</td>
+            <td>${escapeHtml(fields['상품명']) || '-'}</td>
+            <td>${escapeHtml(fields['승인번호']) || '-'}</td>
+            <td>${escapeHtml(r.personalNote) || '-'}</td>
+            <td>${statusBadge}${reason}</td>
+            <td>${link}</td>
+          </tr>
+        `;
+      })
+      .join('');
+
+    receiptTableBody.querySelectorAll('.cc-open-link').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        window.api.openExternal(btn.dataset.url);
+      });
+    });
+  }
+
   // ---- 조회 시작 / 선택 회원 상담관리 열기 ----
   fetchBtn.addEventListener('click', async () => {
     cardCancels = [];
     checkedEmails.clear();
     selectAllCheckbox.checked = false;
+    receiptChecks = [];
     renderTable();
+    renderReceiptTable();
     logOutput.innerHTML = '';
 
     const result = await window.api.startJob({ jobId: 'card_cancel_fetch' });
@@ -533,9 +619,12 @@ function buildCardCancelPanel(container) {
     fetchBtn.disabled = true;
   });
 
-  async function startConsultJob(emails) {
+  async function startConsultJob(targets) {
     logOutput.innerHTML = '';
-    const result = await window.api.startJob({ jobId: 'card_cancel_open_consult', memberEmails: emails });
+    receiptChecks = [];
+    renderReceiptTable();
+
+    const result = await window.api.startJob({ jobId: 'card_cancel_open_consult', targets });
     if (!result.started) {
       alert('이미 실행 중인 작업이 있습니다.');
       return;
@@ -551,7 +640,10 @@ function buildCardCancelPanel(container) {
       alert('먼저 확인할 회원을 체크해주세요.');
       return;
     }
-    startConsultJob(Array.from(checkedEmails));
+    const targets = cardCancels
+      .filter((c) => checkedEmails.has(c.memberEmail))
+      .map((c) => ({ memberEmail: c.memberEmail, memberName: c.memberName, requester: c.requester }));
+    startConsultJob(targets);
   });
 
   manualOpenBtn.addEventListener('click', () => {
@@ -560,7 +652,8 @@ function buildCardCancelPanel(container) {
       alert('회원 이메일(ID)을 입력해주세요.');
       return;
     }
-    startConsultJob([email]);
+    const requester = manualRequesterInput.value.trim();
+    startConsultJob([{ memberEmail: email, memberName: '', requester }]);
   });
 
   stopBtn.addEventListener('click', async () => {
@@ -574,9 +667,15 @@ function buildCardCancelPanel(container) {
     });
 
     window.api.onJobRecord((data) => {
-      if (data.kind !== 'card_cancel' || !data.cardCancel) return;
-      cardCancels.push(data.cardCancel);
-      renderTable();
+      if (data.kind === 'card_cancel' && data.cardCancel) {
+        cardCancels.push(data.cardCancel);
+        renderTable();
+        return;
+      }
+      if (data.kind === 'receipt_check' && data.receiptCheck) {
+        receiptChecks.push(data.receiptCheck);
+        renderReceiptTable();
+      }
     });
 
     window.api.onJobDone((data) => {

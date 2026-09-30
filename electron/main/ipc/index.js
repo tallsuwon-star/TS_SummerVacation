@@ -33,6 +33,7 @@ function registerIpcHandlers(mainWindow) {
   ipcMain.handle('report:tidyText', (_event, rawText) => anthropicClient.tidyText(rawText));
 
   ipcMain.handle('file:reveal', (_event, sourcePath) => fileSave.revealFile(sourcePath));
+  ipcMain.handle('link:openExternal', (_event, url) => fileSave.openExternal(url));
 }
 
 module.exports = registerIpcHandlers;

@@ -56,4 +56,7 @@ contextBridge.exposeInMainWorld('api', {
 
   // 로컬(다운로드 폴더)에 이미 저장된 파일의 위치를 탐색기로 열어 보여준다.
   revealFile: (sourcePath) => ipcRenderer.invoke('file:reveal', sourcePath),
+
+  // 매출전표 상세보기 등 LMS 링크를 기본 브라우저로 연다.
+  openExternal: (url) => ipcRenderer.invoke('link:openExternal', url),
 });
