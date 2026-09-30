@@ -29,8 +29,19 @@ PREPARER_ROW = 6
 
 
 def _parse_amount(raw: str) -> int:
-    digits = re.sub(r"[^\d]", "", raw or "")
-    return int(digits) if digits else 0
+    # 구글시트 금액 칸이 "30000.0"처럼 소수점 있는 텍스트로 넘어올 수 있다.
+    # 숫자가 아닌 문자를 전부 지우면 "."만 없어지고 앞뒤 숫자가 그대로
+    # 이어붙어 "300000"처럼 0이 하나 더 생기므로, 소수점은 실제 값으로
+    # 계산한 뒤 반올림한다 (원화라 소수점 이하는 의미가 없다).
+    text = (raw or "").strip()
+    cleaned = re.sub(r"[^\d.]", "", text)
+    if not cleaned:
+        return 0
+    try:
+        return round(float(cleaned))
+    except ValueError:
+        digits = re.sub(r"[^\d]", "", cleaned)
+        return int(digits) if digits else 0
 
 
 def _format_korean_date(d: date) -> str:

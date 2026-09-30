@@ -82,6 +82,13 @@ def _cell_text(cell) -> str:
     value = cell.value
     if value is None:
         return ""
+    # 환불금액처럼 숫자로 입력된 칸은 openpyxl이 float(예: 30000.0)로 읽어와
+    # 그냥 str()로 바꾸면 "30000.0"처럼 소수점이 붙는다. 이 텍스트를 나중에
+    # "숫자만 남기기"로 처리하면(_parse_amount 등) 점만 지워지고 앞뒤 숫자가
+    # 이어붙어 "300000"처럼 0이 하나 더 생기는 사고로 이어지므로, 정수 값인
+    # float는 여기서 미리 정수 형태 문자열로 바꿔둔다.
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
     return str(value).strip()
 
 

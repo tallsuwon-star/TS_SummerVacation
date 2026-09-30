@@ -285,8 +285,18 @@ def fetch_receipt_detail(driver, detail_url: str) -> dict:
 
 
 def _normalize_amount(text: str) -> str | None:
-    digits = re.sub(r"[^\d]", "", text or "")
-    return digits or None
+    # "30000.0"처럼 소수점이 섞인 텍스트에서 숫자만 남기면 점만 사라지고
+    # 앞뒤 숫자가 이어붙어 "300000"처럼 0이 하나 더 생긴다. 소수점 이하는
+    # 실제 값으로 계산해 버린 뒤(원화라 의미 없음) 정수 문자열로 되돌린다.
+    raw = (text or "").strip()
+    cleaned = re.sub(r"[^\d.]", "", raw)
+    if not cleaned:
+        return None
+    try:
+        return str(round(float(cleaned)))
+    except ValueError:
+        digits = re.sub(r"[^\d]", "", cleaned)
+        return digits or None
 
 
 def compare_amounts(sheet_refund_amount: str, receipt_fields: dict) -> dict:
