@@ -35,6 +35,32 @@ function renderMorningSpecialStatsView(container) {
       </div>
     </section>
 
+    <section class="panel">
+      <div class="field-label login-test-label">강사 블랙/그레이/화이트 타임 설정 (로그인 → 시간표관리 → 검색 → SCH → 체크박스 설정, 제출은 직접)</div>
+      <div class="inline-row">
+        <input type="text" id="tutor-time-test-name" placeholder="강사 이름 (예: Daheetest)" value="Daheetest" />
+        <select id="tutor-time-test-weekday">
+          <option value="0">일</option>
+          <option value="1">월</option>
+          <option value="2">화</option>
+          <option value="3">수</option>
+          <option value="4">목</option>
+          <option value="5">금</option>
+          <option value="6">토</option>
+        </select>
+        <input type="number" id="tutor-time-test-hour" min="0" max="23" value="9" style="width: 4em" />
+        <span>시를</span>
+        <select id="tutor-time-test-state">
+          <option value="white">화이트 타임</option>
+          <option value="black">블랙 타임</option>
+          <option value="gray">그레이 타임</option>
+        </select>
+        <button id="tutor-time-test-btn" class="btn btn-primary">설정 실행</button>
+        <button id="tutor-time-test-stop-btn" class="btn btn-danger" disabled>중단</button>
+        <span id="tutor-time-test-status" class="status-badge status-pending">대기중</span>
+      </div>
+    </section>
+
     <div class="view-header">
       <h1>오전특강 통계</h1>
       <div class="job-controls">
@@ -188,6 +214,14 @@ function renderMorningSpecialStatsView(container) {
   const tutorSearchTestStopBtn = document.getElementById('tutor-search-test-stop-btn');
   const tutorSearchTestStatus = document.getElementById('tutor-search-test-status');
 
+  const tutorTimeTestNameEl = document.getElementById('tutor-time-test-name');
+  const tutorTimeTestWeekdayEl = document.getElementById('tutor-time-test-weekday');
+  const tutorTimeTestHourEl = document.getElementById('tutor-time-test-hour');
+  const tutorTimeTestStateEl = document.getElementById('tutor-time-test-state');
+  const tutorTimeTestBtn = document.getElementById('tutor-time-test-btn');
+  const tutorTimeTestStopBtn = document.getElementById('tutor-time-test-stop-btn');
+  const tutorTimeTestStatus = document.getElementById('tutor-time-test-status');
+
   const startBtn = document.getElementById('start-btn');
   const pauseBtn = document.getElementById('pause-btn');
   const stopBtn = document.getElementById('stop-btn');
@@ -259,13 +293,14 @@ function renderMorningSpecialStatsView(container) {
 
   // 이 화면의 테스트 버튼들과 오전특강 통계 작업은 python worker 프로세스를 하나만 쓰므로
   // 동시에 실행할 수 없다. 지금 실행 중인 작업이 어느 쪽인지 추적해서 완료 시 해당 UI만 되돌린다.
-  let activeJob = null; // 'login_test' | 'tutor_search_test' | 'morning_special_stats' | null
+  let activeJob = null; // 'login_test' | 'tutor_search_test' | 'tutor_schedule_set' | 'morning_special_stats' | null
   let paused = false;
 
   function setStartButtonsDisabled(disabled) {
     startBtn.disabled = disabled;
     loginTestBtn.disabled = disabled;
     tutorSearchTestBtn.disabled = disabled;
+    tutorTimeTestBtn.disabled = disabled;
   }
 
   function setLoginTestStatus(label, statusClass) {
@@ -276,6 +311,11 @@ function renderMorningSpecialStatsView(container) {
   function setTutorSearchTestStatus(label, statusClass) {
     tutorSearchTestStatus.textContent = label;
     tutorSearchTestStatus.className = `status-badge status-${statusClass}`;
+  }
+
+  function setTutorTimeTestStatus(label, statusClass) {
+    tutorTimeTestStatus.textContent = label;
+    tutorTimeTestStatus.className = `status-badge status-${statusClass}`;
   }
 
   loginTestBtn.addEventListener('click', async () => {
@@ -326,6 +366,36 @@ function renderMorningSpecialStatsView(container) {
   tutorSearchTestStopBtn.addEventListener('click', async () => {
     await window.api.stopJob();
     tutorSearchTestStopBtn.disabled = true;
+  });
+
+  tutorTimeTestBtn.addEventListener('click', async () => {
+    const tutorName = tutorTimeTestNameEl.value.trim();
+    if (!tutorName) {
+      alert('강사 이름을 입력해주세요.');
+      return;
+    }
+
+    const result = await window.api.startJob({
+      jobId: 'tutor_schedule_set',
+      tutorName,
+      weekday: Number(tutorTimeTestWeekdayEl.value),
+      hour: Number(tutorTimeTestHourEl.value),
+      state: tutorTimeTestStateEl.value,
+    });
+    if (!result.started) {
+      alert('이미 실행 중인 작업이 있습니다.');
+      return;
+    }
+
+    activeJob = 'tutor_schedule_set';
+    setTutorTimeTestStatus('진행 중', 'processing');
+    setStartButtonsDisabled(true);
+    tutorTimeTestStopBtn.disabled = false;
+  });
+
+  tutorTimeTestStopBtn.addEventListener('click', async () => {
+    await window.api.stopJob();
+    tutorTimeTestStopBtn.disabled = true;
   });
 
   startBtn.addEventListener('click', async () => {
@@ -432,6 +502,12 @@ function renderMorningSpecialStatsView(container) {
         data.code === 0 ? 'success' : 'failed'
       );
       tutorSearchTestStopBtn.disabled = true;
+    } else if (activeJob === 'tutor_schedule_set') {
+      setTutorTimeTestStatus(
+        data.code === 0 ? '완료 (브라우저 창 확인)' : '실패 (로그 확인)',
+        data.code === 0 ? 'success' : 'failed'
+      );
+      tutorTimeTestStopBtn.disabled = true;
     } else if (activeJob === 'morning_special_stats') {
       pauseBtn.disabled = true;
       stopBtn.disabled = true;

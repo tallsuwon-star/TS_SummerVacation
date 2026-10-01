@@ -21,6 +21,7 @@ from .jobs import (
     overdue_report,
     refund_fetch,
     refund_generate,
+    tutor_schedule_set,
     tutor_search_test,
     vocaking_report,
 )
@@ -41,6 +42,7 @@ JOBS = {
     "card_cancel_open_consult": card_cancel_open_consult.run,
     "card_cancel_fetch": card_cancel_fetch.run,
     "expense_write": expense_write.run,
+    "tutor_schedule_set": tutor_schedule_set.run,
 }
 
 
