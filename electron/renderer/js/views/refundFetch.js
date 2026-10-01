@@ -204,13 +204,16 @@ function buildRefundPanel(container) {
           const needsReviewBadge = r.needsReview
             ? ' <span class="status-badge status-failed">확인 필요</span>'
             : '';
+          const copyBtn = r.accountNumberFormatted
+            ? `<button type="button" class="btn btn-ghost copy-account-btn" data-copy="${escapeHtml(r.accountNumberFormatted)}">복사</button>`
+            : '';
           return `
             <tr class="${r.needsReview ? 'row-failed' : ''}">
               <td>${escapeHtml(r.memberName) || '-'}</td>
               <td>${escapeHtml(r.memberEmail) || '-'}</td>
               <td>${escapeHtml(r.refundAmount) || '-'}</td>
               <td>${escapeHtml(r.memo) || '-'}</td>
-              <td>${escapeHtml(accountInfoText(r))}${needsReviewBadge}</td>
+              <td>${escapeHtml(accountInfoText(r))}${needsReviewBadge} ${copyBtn}</td>
             </tr>
           `;
         })
@@ -224,6 +227,20 @@ function buildRefundPanel(container) {
     }
     updateGenerateButtonState();
   }
+
+  // 표 전체에 한 번만 위임해서 등록 — renderTable이 다시 그려도 버튼 클릭이
+  // 계속 동작한다. 계좌번호만 복사해서 뱅킹 앱의 "계좌번호" 입력창에 바로
+  // 붙여넣을 수 있게 한다 (직접 옮겨 적다가 숫자를 틀리는 실수 방지용).
+  tableBody.addEventListener('click', async (event) => {
+    const btn = event.target.closest('.copy-account-btn');
+    if (!btn) return;
+    const result = await window.api.copySummary(btn.dataset.copy);
+    const original = btn.textContent;
+    btn.textContent = result.success ? '복사됨!' : '복사 실패';
+    setTimeout(() => {
+      btn.textContent = original;
+    }, 1200);
+  });
 
   function escapeHtml(text) {
     if (!text) return '';
