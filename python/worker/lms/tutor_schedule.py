@@ -23,6 +23,9 @@ MINUTE_SLOTS = ("00", "10", "20")
 
 BLACK_TYPE = "1"
 GRAY_TYPE = "2"
+# 아직 정확한 용도는 설명되지 않은 세 번째 체크박스("M"). 사용자 확인 결과, 블랙/그레이와
+# 마찬가지로 이것도 꺼져 있어야 화이트 타임이 정상적으로 적용된다.
+EXTRA_TYPE = "3"
 
 STATE_BLACK = "black"
 STATE_GRAY = "gray"
@@ -64,6 +67,9 @@ def set_hour_state(driver, weekday: int, hour: int, state: str, minute_slots: tu
         BLACK_TYPE: state == STATE_BLACK,
         GRAY_TYPE: state == STATE_GRAY,
     }
+    if state == STATE_WHITE:
+        # 화이트 타임은 블랙/그레이뿐 아니라 세 번째 체크("M")까지 모두 꺼져 있어야 한다.
+        want_checked[EXTRA_TYPE] = False
 
     emit_log(f"{weekday_name}요일 {hour}시({'/'.join(minute_slots)}분)를 "
              f"{'블랙' if state == STATE_BLACK else '그레이' if state == STATE_GRAY else '화이트'} 타임으로 설정")

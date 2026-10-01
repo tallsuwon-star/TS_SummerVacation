@@ -37,8 +37,12 @@ function renderMorningSpecialStatsView(container) {
 
     <section class="panel">
       <div class="field-label login-test-label">강사 블랙/그레이/화이트 타임 설정 (로그인 → 시간표관리 → 검색 → SCH → 체크박스 설정, 제출은 직접)</div>
+      <div class="tutor-roster-actions">
+        <input type="text" id="black-time-roster-input" placeholder="강사 이름 추가 (예: Daheetest)" />
+        <button id="black-time-roster-add-btn" type="button" class="btn btn-ghost">추가</button>
+      </div>
+      <div id="black-time-roster-list" class="black-time-roster-list"></div>
       <div class="inline-row">
-        <input type="text" id="tutor-time-test-name" placeholder="강사 이름 (예: Daheetest)" value="Daheetest" />
         <select id="tutor-time-test-weekday">
           <option value="0">일</option>
           <option value="1">월</option>
@@ -214,7 +218,10 @@ function renderMorningSpecialStatsView(container) {
   const tutorSearchTestStopBtn = document.getElementById('tutor-search-test-stop-btn');
   const tutorSearchTestStatus = document.getElementById('tutor-search-test-status');
 
-  const tutorTimeTestNameEl = document.getElementById('tutor-time-test-name');
+  const blackTimeRosterInput = document.getElementById('black-time-roster-input');
+  const blackTimeRosterAddBtn = document.getElementById('black-time-roster-add-btn');
+  const blackTimeRosterListEl = document.getElementById('black-time-roster-list');
+
   const tutorTimeTestWeekdayEl = document.getElementById('tutor-time-test-weekday');
   const tutorTimeTestHourEl = document.getElementById('tutor-time-test-hour');
   const tutorTimeTestStateEl = document.getElementById('tutor-time-test-state');
@@ -279,6 +286,65 @@ function renderMorningSpecialStatsView(container) {
     updateTutorRosterCount();
   });
 
+  let blackTimeTutorRoster = [];
+  let selectedBlackTimeTutor = null;
+
+  function renderBlackTimeRoster() {
+    const sorted = [...blackTimeTutorRoster].sort((a, b) => a.localeCompare(b));
+    blackTimeRosterListEl.innerHTML = sorted
+      .map(
+        (name, idx) => `
+          <div class="checkbox-row black-time-roster-row">
+            <input type="radio" name="black-time-roster-select" id="black-time-roster-${idx}"
+              value="${escapeHtml(name)}" ${name === selectedBlackTimeTutor ? 'checked' : ''} />
+            <label for="black-time-roster-${idx}">${escapeHtml(name)}</label>
+            <button type="button" class="btn btn-ghost black-time-roster-remove-btn" data-name="${escapeHtml(name)}">삭제</button>
+          </div>
+        `
+      )
+      .join('');
+  }
+
+  function persistBlackTimeTutorRoster() {
+    window.api.setSettings({ blackTimeTutorRoster });
+  }
+
+  blackTimeRosterAddBtn.addEventListener('click', () => {
+    const name = blackTimeRosterInput.value.trim();
+    if (!name) return;
+
+    if (blackTimeTutorRoster.some((existing) => existing.toLowerCase() === name.toLowerCase())) {
+      alert('이미 명단에 있는 이름입니다.');
+      return;
+    }
+
+    blackTimeTutorRoster.push(name);
+    persistBlackTimeTutorRoster();
+    renderBlackTimeRoster();
+    blackTimeRosterInput.value = '';
+  });
+
+  blackTimeRosterInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') blackTimeRosterAddBtn.click();
+  });
+
+  blackTimeRosterListEl.addEventListener('click', (e) => {
+    const removeBtn = e.target.closest('.black-time-roster-remove-btn');
+    if (!removeBtn) return;
+
+    const name = removeBtn.dataset.name;
+    blackTimeTutorRoster = blackTimeTutorRoster.filter((existing) => existing !== name);
+    if (selectedBlackTimeTutor === name) selectedBlackTimeTutor = null;
+    persistBlackTimeTutorRoster();
+    renderBlackTimeRoster();
+  });
+
+  blackTimeRosterListEl.addEventListener('change', (e) => {
+    if (e.target.name === 'black-time-roster-select') {
+      selectedBlackTimeTutor = e.target.value;
+    }
+  });
+
   window.api.getSettings().then((settings) => {
     consultationInput.value = settings.criteria?.consultationAfter || '2026-08-18';
     classInput.value = settings.criteria?.classAfter || '2026-08-20';
@@ -289,6 +355,9 @@ function renderMorningSpecialStatsView(container) {
       el.checked = checkedSet.has(el.dataset.name);
     });
     updateTutorRosterCount();
+
+    blackTimeTutorRoster = settings.blackTimeTutorRoster || [];
+    renderBlackTimeRoster();
   });
 
   // 이 화면의 테스트 버튼들과 오전특강 통계 작업은 python worker 프로세스를 하나만 쓰므로
@@ -369,15 +438,14 @@ function renderMorningSpecialStatsView(container) {
   });
 
   tutorTimeTestBtn.addEventListener('click', async () => {
-    const tutorName = tutorTimeTestNameEl.value.trim();
-    if (!tutorName) {
-      alert('강사 이름을 입력해주세요.');
+    if (!selectedBlackTimeTutor) {
+      alert('강사명단에서 설정할 강사를 선택해주세요.');
       return;
     }
 
     const result = await window.api.startJob({
       jobId: 'tutor_schedule_set',
-      tutorName,
+      tutorName: selectedBlackTimeTutor,
       weekday: Number(tutorTimeTestWeekdayEl.value),
       hour: Number(tutorTimeTestHourEl.value),
       state: tutorTimeTestStateEl.value,

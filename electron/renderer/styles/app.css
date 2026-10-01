@@ -331,6 +331,23 @@ textarea {
   user-select: none;
 }
 
+.black-time-roster-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+  margin-bottom: 10px;
+}
+
+.black-time-roster-row {
+  justify-content: space-between;
+}
+
+.black-time-roster-row label {
+  flex: 1;
+}
+
 .file-input-row {
   display: flex;
   align-items: center;
