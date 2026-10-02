@@ -52,3 +52,21 @@ NAVER_DOWNLOAD_DIR = ROOT_DIR / "downloads" / "naver_store"
 
 # 요청/클릭 사이 딜레이 (초)
 REQUEST_DELAY_SECONDS = 2.5
+
+if not getattr(sys, "frozen", False):
+    # .env가 엉뚱한 경로에 있거나(예: 레포 루트가 아닌 하위 폴더), 확장자가
+    # 실제로는 ".env.txt"인 경우(메모장으로 저장할 때 흔함) 등을 사용자가
+    # 직접 로그로 확인할 수 있게, 매 작업 시작 시 .env 로드 상태를 한 줄 남긴다.
+    # 비밀번호 값 자체는 절대 로그에 남기지 않는다.
+    from .utils.progress import emit_log as _emit_log
+
+    _env_path = ROOT_DIR / ".env"
+    if _env_path.exists():
+        _emit_log(
+            f".env 로드됨: {_env_path} "
+            f"(LMS_ID {'설정됨' if LMS_ID else '비어있음'}, "
+            f"LMS_PASSWORD {'설정됨' if LMS_PASSWORD else '비어있음'}, "
+            f"LMS_BASE_URL {'설정됨' if LMS_BASE_URL else '비어있음'})"
+        )
+    else:
+        _emit_log(f".env 파일을 찾지 못했습니다. 이 경로에 .env를 만들어주세요: {_env_path}", level="error")

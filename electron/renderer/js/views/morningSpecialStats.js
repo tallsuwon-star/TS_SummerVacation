@@ -124,6 +124,7 @@ function renderMorningSpecialStatsView(container) {
       <div class="log-toolbar">
         <input type="text" id="log-search" class="roster-search-input" placeholder="로그 검색... (일치하는 줄만 표시)" />
         <span id="log-search-count" class="tutor-roster-count"></span>
+        <button id="log-copy-all-btn" type="button" class="btn btn-ghost">로그 전체 복사</button>
       </div>
       <div id="log-output" class="log-output"></div>
     </section>
@@ -135,7 +136,19 @@ function renderMorningSpecialStatsView(container) {
 
   const logSearchInput = document.getElementById('log-search');
   const logSearchCount = document.getElementById('log-search-count');
+  const logCopyAllBtn = document.getElementById('log-copy-all-btn');
   let logSearchQuery = '';
+
+  logCopyAllBtn.addEventListener('click', async () => {
+    const text = Array.from(logOutput.children)
+      .map((line) => line.textContent)
+      .join('\n');
+    const result = await window.api.copySummary(text);
+    logCopyAllBtn.textContent = result.success ? '복사됨!' : '복사 실패';
+    setTimeout(() => {
+      logCopyAllBtn.textContent = '로그 전체 복사';
+    }, 1500);
+  });
 
   function applyLogLineVisibility(line) {
     const matches = !logSearchQuery || line.textContent.toLowerCase().includes(logSearchQuery);
