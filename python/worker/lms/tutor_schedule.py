@@ -21,6 +21,11 @@ from ..utils.progress import emit_log
 WEEKDAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"]
 MINUTE_SLOTS = ("00", "10", "20")
 
+# SCH 팝업에 처음 들어가면 체크박스 표가 바로 안 보이고, 아래 버튼을 눌러야
+# tutor_schedule(tutor_id)가 호출되면서 체크박스 표가 열린다.
+# <input type="button" onclick="tutor_schedule('Daheetest11')" value="수업시간표관리" ...>
+SCHEDULE_BUTTON_VALUE = "수업시간표관리"
+
 BLACK_TYPE = "1"
 GRAY_TYPE = "2"
 # 아직 정확한 용도는 설명되지 않은 세 번째 체크박스("M"). 사용자 확인 결과, 블랙/그레이와
@@ -36,8 +41,23 @@ class TutorScheduleError(Exception):
     pass
 
 
+def open_schedule_checkboxes(driver, timeout: float = 10) -> None:
+    """"수업시간표관리" 버튼을 눌러 체크박스 표를 연다."""
+    try:
+        button = WebDriverWait(driver, timeout).until(
+            EC.element_to_be_clickable(
+                (By.XPATH, f"//input[@type='button' and @value='{SCHEDULE_BUTTON_VALUE}']")
+            )
+        )
+    except TimeoutException as exc:
+        raise TutorScheduleError(f"'{SCHEDULE_BUTTON_VALUE}' 버튼을 찾지 못했습니다.") from exc
+
+    emit_log(f"'{SCHEDULE_BUTTON_VALUE}' 버튼 클릭")
+    button.click()
+
+
 def wait_for_schedule_page(driver, timeout: float = 10) -> None:
-    """시간표 팝업(체크박스 그리드)이 로딩될 때까지 대기."""
+    """체크박스 표가 로딩될 때까지 대기."""
     try:
         WebDriverWait(driver, timeout).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='checkbox'][id^='time_']"))

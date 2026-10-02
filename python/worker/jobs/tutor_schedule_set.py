@@ -13,7 +13,12 @@ from ..control import ControlState
 from ..lms.auth import LoginFailedError, login
 from ..lms.driver import build_driver
 from ..lms.navigation import NavigationError, go_to_native_tutor_schedule
-from ..lms.tutor_schedule import TutorScheduleError, set_hour_state, wait_for_schedule_page
+from ..lms.tutor_schedule import (
+    TutorScheduleError,
+    open_schedule_checkboxes,
+    set_hour_state,
+    wait_for_schedule_page,
+)
 from ..lms.tutor_search import SchButtonNotFoundError, TutorNotFoundError, click_sch_button, search_tutor
 from ..utils.progress import emit_done, emit_log
 
@@ -37,6 +42,7 @@ def run(job_payload: dict, control: ControlState) -> None:
         go_to_native_tutor_schedule(driver)
         search_tutor(driver, tutor_name)
         click_sch_button(driver, tutor_name)
+        open_schedule_checkboxes(driver)
         wait_for_schedule_page(driver)
 
         set_hour_state(driver, int(weekday), int(hour), state)
