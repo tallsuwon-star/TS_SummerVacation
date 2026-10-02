@@ -60,9 +60,8 @@ function renderMorningSpecialStatsView(container) {
         </select>
         <span>를</span>
         <select id="tutor-time-test-state">
-          <option value="white">화이트 타임</option>
-          <option value="black">블랙 타임</option>
-          <option value="gray">그레이 타임</option>
+          <option value="open">열기 (화이트 타임)</option>
+          <option value="close">닫기 (블랙+그레이 체크)</option>
         </select>
         <button id="tutor-time-test-btn" class="btn btn-primary">설정 실행</button>
         <button id="tutor-time-test-stop-btn" class="btn btn-danger" disabled>중단</button>

@@ -1,6 +1,11 @@
 """원어민 강사 시간표(수업 시간표 관리) 화면에서, 특정 요일×시간의 체크박스를
-블랙타임(진하게 칠해진 칸) / 그레이타임(휴식시간) / 화이트타임(수업 가능, 체크 없음)
-상태로 바꾼다.
+수업 "열기"(화이트 타임: 블랙/그레이/M 모두 체크 해제) 또는 "닫기"(블랙+그레이
+동시 체크) 상태로 바꾼다.
+
+사용자 확인 결과, 실제 화면에서는 블랙 타임과 그레이 타임 체크박스가 같은 칸에서
+동시에 체크되어 있는 경우가 많다(즉 블랙/그레이가 서로 배타적인 단일 상태가
+아니다). 그래서 "수업을 연다"는 그 칸의 블랙+그레이(+M) 체크를 전부 지우는
+것이고, "수업을 닫는다"는 블랙+그레이를 둘 다 체크하는 것으로 처리한다.
 
 이 화면은 SCH 버튼을 눌러 연 "원어민 강사 시간표" 팝업에서 "수업시간표관리" 버튼을
 또 눌러야 새 팝업 창으로 열리는 실제 체크박스 표(/edu/AD_page/tutor/tutor_schedule.php
@@ -38,9 +43,8 @@ GRAY_TYPE = "2"
 # 마찬가지로 이것도 꺼져 있어야 화이트 타임이 정상적으로 적용된다.
 EXTRA_TYPE = "3"
 
-STATE_BLACK = "black"
-STATE_GRAY = "gray"
-STATE_WHITE = "white"
+STATE_OPEN = "open"
+STATE_CLOSE = "close"
 
 
 class TutorScheduleError(Exception):
@@ -86,14 +90,13 @@ def wait_for_schedule_page(driver, timeout: float = 10) -> None:
 
 def set_hour_state(driver, weekday: int, hour: int, state: str, start_minute: int = 0) -> None:
     """지정한 요일(0=일 ... 6=토)의 지정한 수업(hour시 start_minute분 시작, 10분 단위
-    3칸: start_minute/+10/+20)을 블랙/그레이/화이트 타임으로 맞춘다. start_minute은
-    0(정시 수업) 또는 30(30분 수업)만 유효하다.
+    3칸: start_minute/+10/+20)을 열거나 닫는다. start_minute은 0(정시 수업) 또는
+    30(30분 수업)만 유효하다.
 
-    - black: type1(블랙) 체크, type2(그레이) 해제
-    - gray : type2(그레이) 체크, type1(블랙) 해제
-    - white: 둘 다 해제
+    - open : 블랙(type1)/그레이(type2)/M(type3) 모두 체크 해제 (화이트 타임)
+    - close: 블랙(type1)과 그레이(type2)를 모두 체크 (M은 건드리지 않음)
     """
-    if state not in (STATE_BLACK, STATE_GRAY, STATE_WHITE):
+    if state not in (STATE_OPEN, STATE_CLOSE):
         raise ValueError(f"알 수 없는 상태: {state}")
     if not (0 <= weekday <= 6):
         raise ValueError(f"요일 값은 0(일)~6(토) 범위여야 합니다: {weekday}")
@@ -107,15 +110,15 @@ def set_hour_state(driver, weekday: int, hour: int, state: str, start_minute: in
     weekday_name = WEEKDAY_NAMES[weekday]
 
     want_checked = {
-        BLACK_TYPE: state == STATE_BLACK,
-        GRAY_TYPE: state == STATE_GRAY,
+        BLACK_TYPE: state == STATE_CLOSE,
+        GRAY_TYPE: state == STATE_CLOSE,
     }
-    if state == STATE_WHITE:
-        # 화이트 타임은 블랙/그레이뿐 아니라 세 번째 체크("M")까지 모두 꺼져 있어야 한다.
+    if state == STATE_OPEN:
+        # 화이트 타임(열기)은 블랙/그레이뿐 아니라 세 번째 체크("M")까지 모두 꺼져 있어야 한다.
         want_checked[EXTRA_TYPE] = False
 
     emit_log(f"{weekday_name}요일 {hour}시({'/'.join(minute_slots)}분)를 "
-             f"{'블랙' if state == STATE_BLACK else '그레이' if state == STATE_GRAY else '화이트'} 타임으로 설정")
+             f"{'닫기(블랙+그레이 체크)' if state == STATE_CLOSE else '열기(화이트 타임)'}")
 
     changed = False
     for minute in minute_slots:
