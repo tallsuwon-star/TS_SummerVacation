@@ -29,6 +29,7 @@ def run(job_payload: dict, control: ControlState) -> None:
     tutor_name = (job_payload.get("tutorName") or "").strip()
     weekday = job_payload.get("weekday")
     hour = job_payload.get("hour")
+    start_minute = job_payload.get("startMinute", 0)
     state = (job_payload.get("state") or "").strip()
 
     if not tutor_name or weekday is None or hour is None or not state:
@@ -45,7 +46,7 @@ def run(job_payload: dict, control: ControlState) -> None:
         open_schedule_checkboxes(driver)
         wait_for_schedule_page(driver)
 
-        set_hour_state(driver, int(weekday), int(hour), state)
+        set_hour_state(driver, int(weekday), int(hour), state, start_minute=int(start_minute))
 
         emit_log("설정을 마쳤습니다. 화면에서 직접 확인 후 '작성완료'를 눌러주세요.")
         emit_log("확인이 끝나면 '중단' 버튼을 눌러 이 작업을 종료해주세요 (브라우저는 그대로 열려 있습니다).")

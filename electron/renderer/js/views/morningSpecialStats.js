@@ -53,7 +53,12 @@ function renderMorningSpecialStatsView(container) {
           <option value="6">토</option>
         </select>
         <input type="number" id="tutor-time-test-hour" min="0" max="23" value="9" style="width: 4em" />
-        <span>시를</span>
+        <span>시</span>
+        <select id="tutor-time-test-minute">
+          <option value="0">정시 수업 (00/10/20분)</option>
+          <option value="30">30분 수업 (30/40/50분)</option>
+        </select>
+        <span>를</span>
         <select id="tutor-time-test-state">
           <option value="white">화이트 타임</option>
           <option value="black">블랙 타임</option>
@@ -237,6 +242,7 @@ function renderMorningSpecialStatsView(container) {
 
   const tutorTimeTestWeekdayEl = document.getElementById('tutor-time-test-weekday');
   const tutorTimeTestHourEl = document.getElementById('tutor-time-test-hour');
+  const tutorTimeTestMinuteEl = document.getElementById('tutor-time-test-minute');
   const tutorTimeTestStateEl = document.getElementById('tutor-time-test-state');
   const tutorTimeTestBtn = document.getElementById('tutor-time-test-btn');
   const tutorTimeTestStopBtn = document.getElementById('tutor-time-test-stop-btn');
@@ -461,6 +467,7 @@ function renderMorningSpecialStatsView(container) {
       tutorName: selectedBlackTimeTutor,
       weekday: Number(tutorTimeTestWeekdayEl.value),
       hour: Number(tutorTimeTestHourEl.value),
+      startMinute: Number(tutorTimeTestMinuteEl.value),
       state: tutorTimeTestStateEl.value,
     });
     if (!result.started) {

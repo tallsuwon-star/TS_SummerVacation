@@ -2,12 +2,18 @@
 블랙타임(진하게 칠해진 칸) / 그레이타임(휴식시간) / 화이트타임(수업 가능, 체크 없음)
 상태로 바꾼다.
 
-이 화면은 SCH 버튼을 눌러 연 "시간표" 팝업(page1_pop.php?tutor_id=...)이며, 체크박스
-id는 `time_{시HH}{분MM}{요일0~6}{구분1or2}` 형식이고(예: 09시 00분 일요일 블랙타임 =
-"time_090001"), 각 체크박스의 onclick이 그 시간대의 숨은 필드(`{시HH}time`)를
-`chkMinute(시HH)`로 다시 계산한다. 그래서 여기서는 체크박스를 실제 클릭(JS click())해서
-그 onclick 체인이 그대로 타게 하고, 혹시 모를 경우를 대비해 체크 상태를 바꾼 시(hour)마다
-`chkMinute()`를 한 번 더 직접 호출해 숨은 필드가 반드시 갱신되게 한다.
+이 화면은 SCH 버튼을 눌러 연 "원어민 강사 시간표" 팝업에서 "수업시간표관리" 버튼을
+또 눌러야 새 팝업 창으로 열리는 실제 체크박스 표(/edu/AD_page/tutor/tutor_schedule.php
+?tutor_id=...)이다. 체크박스 id는 `time_{시HH}{분MM}{요일0~6}{구분1~3}` 형식이고
+(예: 09시 00분 일요일 블랙타임 = "time_090001"), 각 체크박스의 onclick이 그 시간대의
+숨은 필드(`{시HH}time`)를 `chkMinute(시HH)`로 다시 계산한다. 그래서 여기서는 체크박스를
+실제 클릭(JS click())해서 그 onclick 체인이 그대로 타게 하고, 혹시 모를 경우를 대비해
+체크 상태를 바꾼 시(hour)마다 `chkMinute()`를 한 번 더 직접 호출해 숨은 필드가 반드시
+갱신되게 한다.
+
+한 "시(hour)" 행에는 00/10/20/30/40/50분, 총 6개의 10분 단위 칸이 있고 이는 정시 수업
+(00/10/20분)과 30분 수업(30/40/50분) 두 수업 슬롯에 해당한다. 그래서 "몇 시 수업을 연다"는
+그 수업이 시작하는 분(0 또는 30)부터 10분 단위로 3칸만 묶어서 처리해야 한다.
 
 절대 "작성완료" 제출 버튼은 누르지 않는다 — 사용자가 화면에서 직접 확인하고 제출한다."""
 
@@ -17,12 +23,12 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
 from ..utils.progress import emit_log
+from .driver import switch_to_new_window
 
 WEEKDAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"]
-MINUTE_SLOTS = ("00", "10", "20")
 
-# SCH 팝업에 처음 들어가면 체크박스 표가 바로 안 보이고, 아래 버튼을 눌러야
-# tutor_schedule(tutor_id)가 호출되면서 체크박스 표가 열린다.
+# SCH 팝업("원어민 강사 시간표")에서 이 버튼을 눌러야 실제 체크박스 표가 담긴
+# 새 팝업 창(tutor_schedule.php)이 열린다.
 # <input type="button" onclick="tutor_schedule('Daheetest11')" value="수업시간표관리" ...>
 SCHEDULE_BUTTON_VALUE = "수업시간표관리"
 
@@ -42,7 +48,12 @@ class TutorScheduleError(Exception):
 
 
 def open_schedule_checkboxes(driver, timeout: float = 10) -> None:
-    """"수업시간표관리" 버튼을 눌러 체크박스 표를 연다."""
+    """"수업시간표관리" 버튼을 눌러 체크박스 표를 연다.
+
+    이 버튼은 새 팝업 창(tutor_schedule.php)을 여는 방식이라, 클릭 후 그 새 창으로
+    전환해야 이후 체크박스 조작이 된다. 혹시 같은 창에서 페이지가 바뀌는 경우를
+    대비해, 새 창이 안 열려도 오류로 처리하지 않고 계속 진행한다.
+    """
     try:
         button = WebDriverWait(driver, timeout).until(
             EC.element_to_be_clickable(
@@ -53,7 +64,14 @@ def open_schedule_checkboxes(driver, timeout: float = 10) -> None:
         raise TutorScheduleError(f"'{SCHEDULE_BUTTON_VALUE}' 버튼을 찾지 못했습니다.") from exc
 
     emit_log(f"'{SCHEDULE_BUTTON_VALUE}' 버튼 클릭")
+    windows_before = driver.window_handles
     button.click()
+
+    try:
+        switch_to_new_window(driver, windows_before, timeout=5)
+        emit_log("시간표 체크박스 팝업으로 전환 완료")
+    except TimeoutException:
+        pass
 
 
 def wait_for_schedule_page(driver, timeout: float = 10) -> None:
@@ -66,9 +84,10 @@ def wait_for_schedule_page(driver, timeout: float = 10) -> None:
         raise TutorScheduleError("시간표 체크박스 화면을 찾지 못했습니다.") from exc
 
 
-def set_hour_state(driver, weekday: int, hour: int, state: str, minute_slots: tuple = MINUTE_SLOTS) -> None:
-    """지정한 요일(0=일 ... 6=토)의 지정한 시(hour)를, 그 시간에 속한 10분 단위
-    칸들(기본: 00/10/20분) 모두에 대해 블랙/그레이/화이트 타임으로 맞춘다.
+def set_hour_state(driver, weekday: int, hour: int, state: str, start_minute: int = 0) -> None:
+    """지정한 요일(0=일 ... 6=토)의 지정한 수업(hour시 start_minute분 시작, 10분 단위
+    3칸: start_minute/+10/+20)을 블랙/그레이/화이트 타임으로 맞춘다. start_minute은
+    0(정시 수업) 또는 30(30분 수업)만 유효하다.
 
     - black: type1(블랙) 체크, type2(그레이) 해제
     - gray : type2(그레이) 체크, type1(블랙) 해제
@@ -78,6 +97,10 @@ def set_hour_state(driver, weekday: int, hour: int, state: str, minute_slots: tu
         raise ValueError(f"알 수 없는 상태: {state}")
     if not (0 <= weekday <= 6):
         raise ValueError(f"요일 값은 0(일)~6(토) 범위여야 합니다: {weekday}")
+    if start_minute not in (0, 30):
+        raise ValueError(f"시작 분은 0 또는 30이어야 합니다: {start_minute}")
+
+    minute_slots = tuple(f"{start_minute + offset:02d}" for offset in (0, 10, 20))
 
     hour_str = f"{hour:02d}"
     weekday_str = str(weekday)
