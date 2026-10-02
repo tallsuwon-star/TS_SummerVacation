@@ -19,22 +19,12 @@ LOGIN_BUTTON_XPATH = (
 )
 
 # 새로 로그인할 때마다 LMS가 봇으로 의심할 수 있어, 성공한 로그인은 쿠키로 저장해뒀다가
-# 다음 실행에서 재사용한다 (아래 세션 저장/복원 로직). 그래도 세션이 이미 풀려있어서
-# 매번 새로 로그인해야 하는 상황이 짧은 시간 안에 반복되면, 그 자체가 봇 탐지를 유발할
-# 수 있으므로 아래 LOGIN_RATE_LIMIT_* 로 새 로그인 빈도를 제한한다.
+# 다음 실행에서 재사용한다 (아래 세션 저장/복원 로직).
 SESSION_DIR_NAME = "session"
 COOKIES_FILENAME = "lms_cookies.json"
-LOGIN_ATTEMPTS_FILENAME = "login_attempts.json"
-
-LOGIN_RATE_LIMIT_WINDOW_SECONDS = 60 * 60  # 1시간
-LOGIN_RATE_LIMIT_MAX_FRESH_LOGINS = 1  # 이 윈도우 안에서 "새로" 로그인 가능한 최대 횟수
 
 
 class LoginFailedError(Exception):
-    pass
-
-
-class LoginRateLimitedError(LoginFailedError):
     pass
 
 
@@ -49,8 +39,6 @@ def login(driver) -> None:
 
     if _try_restore_session(driver):
         return
-
-    _check_login_rate_limit()
 
     emit_log("LMS 로그인 시도")
 
@@ -86,7 +74,6 @@ def login(driver) -> None:
     emit_log("LMS 로그인 시도 완료 (TODO: 성공 여부 검증 로직 추가 필요)")
 
     _save_session(driver)
-    _record_fresh_login_attempt()
 
 
 def _dismiss_alert_if_present(driver, timeout: float = 3) -> bool:
@@ -111,10 +98,6 @@ def _session_dir() -> Path:
 
 def _cookies_path() -> Path:
     return _session_dir() / COOKIES_FILENAME
-
-
-def _login_attempts_path() -> Path:
-    return _session_dir() / LOGIN_ATTEMPTS_FILENAME
 
 
 def _try_restore_session(driver) -> bool:
@@ -184,44 +167,3 @@ def _clear_saved_session() -> None:
         _cookies_path().unlink()
     except FileNotFoundError:
         pass
-
-
-def _check_login_rate_limit() -> None:
-    """최근 1시간 안에 이미 새로 로그인한 적이 있으면 추가 로그인을 막는다.
-
-    LMS가 짧은 시간에 반복적으로 새 로그인을 시도하는 걸 봇으로 의심할 수 있어서,
-    저장된 세션이 없거나 만료돼서 "또" 새로 로그인해야 하는 상황이 1시간에 여러 번
-    생기면 실행 자체를 막고 사람이 확인하게 한다.
-    """
-    now = time.time()
-    recent = _recent_login_attempts(now)
-
-    if len(recent) >= LOGIN_RATE_LIMIT_MAX_FRESH_LOGINS:
-        wait_seconds = LOGIN_RATE_LIMIT_WINDOW_SECONDS - (now - min(recent))
-        wait_minutes = max(1, int(wait_seconds // 60) + 1)
-        raise LoginRateLimitedError(
-            f"최근 1시간 안에 이미 새로 로그인을 시도했습니다. LMS의 봇 탐지를 피하기 위해 "
-            f"지금은 추가 로그인을 막습니다. 약 {wait_minutes}분 후 다시 시도해주세요."
-        )
-
-
-def _record_fresh_login_attempt() -> None:
-    now = time.time()
-    recent = _recent_login_attempts(now)
-    recent.append(now)
-    path = _login_attempts_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as f:
-        json.dump(recent, f)
-
-
-def _recent_login_attempts(now: float) -> list[float]:
-    path = _login_attempts_path()
-    if not path.exists():
-        return []
-    try:
-        with path.open("r", encoding="utf-8") as f:
-            attempts = json.load(f)
-    except (json.JSONDecodeError, OSError):
-        return []
-    return [t for t in attempts if now - t < LOGIN_RATE_LIMIT_WINDOW_SECONDS]
