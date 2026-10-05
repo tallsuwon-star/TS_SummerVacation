@@ -52,19 +52,26 @@ function renderMorningSpecialStatsView(container) {
       <div class="tutor-roster-actions">
         <input type="text" id="black-time-roster-input" placeholder="강사 이름 추가 (예: Daheetest)" />
         <button id="black-time-roster-add-btn" type="button" class="btn btn-ghost">추가</button>
+        <button id="black-time-roster-select-all-btn" type="button" class="btn btn-ghost">전체 선택</button>
+        <button id="black-time-roster-deselect-all-btn" type="button" class="btn btn-ghost">전체 해제</button>
       </div>
       <div id="black-time-roster-list" class="black-time-roster-list"></div>
+
+      <div class="field-label">적용할 요일 선택 (여러 개 선택 가능)</div>
+      <div class="inline-row" id="tutor-weekday-group">
+        <label class="checkbox-row"><input type="checkbox" class="tutor-weekday-chk" value="0" /> 일</label>
+        <label class="checkbox-row"><input type="checkbox" class="tutor-weekday-chk" value="1" /> 월</label>
+        <label class="checkbox-row"><input type="checkbox" class="tutor-weekday-chk" value="2" /> 화</label>
+        <label class="checkbox-row"><input type="checkbox" class="tutor-weekday-chk" value="3" /> 수</label>
+        <label class="checkbox-row"><input type="checkbox" class="tutor-weekday-chk" value="4" /> 목</label>
+        <label class="checkbox-row"><input type="checkbox" class="tutor-weekday-chk" value="5" /> 금</label>
+        <label class="checkbox-row"><input type="checkbox" class="tutor-weekday-chk" value="6" /> 토</label>
+        <button id="tutor-weekday-select-all-btn" type="button" class="btn btn-ghost">전체 선택</button>
+        <button id="tutor-weekday-deselect-all-btn" type="button" class="btn btn-ghost">전체 해제</button>
+      </div>
+
       <div class="inline-row">
-        <select id="tutor-time-test-weekday">
-          <option value="0">일</option>
-          <option value="1">월</option>
-          <option value="2">화</option>
-          <option value="3">수</option>
-          <option value="4">목</option>
-          <option value="5">금</option>
-          <option value="6">토</option>
-        </select>
-        <span>요일을</span>
+        <span>선택한 강사·요일·시간을</span>
         <select id="tutor-time-test-state">
           <option value="open">열기 (화이트 타임)</option>
           <option value="close">닫기 (블랙+그레이 체크)</option>
@@ -271,8 +278,34 @@ function renderMorningSpecialStatsView(container) {
   const blackTimeRosterAddBtn = document.getElementById('black-time-roster-add-btn');
   const blackTimeRosterListEl = document.getElementById('black-time-roster-list');
 
-  const tutorTimeTestWeekdayEl = document.getElementById('tutor-time-test-weekday');
   const tutorTimeTestStateEl = document.getElementById('tutor-time-test-state');
+  const tutorWeekdaySelectAllBtn = document.getElementById('tutor-weekday-select-all-btn');
+  const tutorWeekdayDeselectAllBtn = document.getElementById('tutor-weekday-deselect-all-btn');
+  const blackTimeRosterSelectAllBtn = document.getElementById('black-time-roster-select-all-btn');
+  const blackTimeRosterDeselectAllBtn = document.getElementById('black-time-roster-deselect-all-btn');
+  const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
+
+  function getTutorWeekdayChecks() {
+    return Array.from(document.querySelectorAll('.tutor-weekday-chk'));
+  }
+
+  function getSelectedWeekdays() {
+    return getTutorWeekdayChecks()
+      .filter((el) => el.checked)
+      .map((el) => Number(el.value));
+  }
+
+  tutorWeekdaySelectAllBtn.addEventListener('click', () => {
+    getTutorWeekdayChecks().forEach((el) => {
+      el.checked = true;
+    });
+  });
+
+  tutorWeekdayDeselectAllBtn.addEventListener('click', () => {
+    getTutorWeekdayChecks().forEach((el) => {
+      el.checked = false;
+    });
+  });
   const tutorTimeTestBtn = document.getElementById('tutor-time-test-btn');
   const tutorTimeTestStopBtn = document.getElementById('tutor-time-test-stop-btn');
   const tutorTimeTestStatus = document.getElementById('tutor-time-test-status');
@@ -435,7 +468,7 @@ function renderMorningSpecialStatsView(container) {
   }
 
   let blackTimeTutorRoster = [];
-  let selectedBlackTimeTutor = null;
+  let selectedBlackTimeTutors = new Set();
 
   function renderBlackTimeRoster() {
     const sorted = [...blackTimeTutorRoster].sort((a, b) => a.localeCompare(b));
@@ -443,8 +476,8 @@ function renderMorningSpecialStatsView(container) {
       .map(
         (name, idx) => `
           <div class="checkbox-row black-time-roster-row">
-            <input type="radio" name="black-time-roster-select" id="black-time-roster-${idx}"
-              value="${escapeHtml(name)}" ${name === selectedBlackTimeTutor ? 'checked' : ''} />
+            <input type="checkbox" id="black-time-roster-${idx}" data-name="${escapeHtml(name)}"
+              ${selectedBlackTimeTutors.has(name) ? 'checked' : ''} />
             <label for="black-time-roster-${idx}">${escapeHtml(name)}</label>
             <button type="button" class="btn btn-ghost black-time-roster-remove-btn" data-name="${escapeHtml(name)}">삭제</button>
           </div>
@@ -482,15 +515,27 @@ function renderMorningSpecialStatsView(container) {
 
     const name = removeBtn.dataset.name;
     blackTimeTutorRoster = blackTimeTutorRoster.filter((existing) => existing !== name);
-    if (selectedBlackTimeTutor === name) selectedBlackTimeTutor = null;
+    selectedBlackTimeTutors.delete(name);
     persistBlackTimeTutorRoster();
     renderBlackTimeRoster();
   });
 
   blackTimeRosterListEl.addEventListener('change', (e) => {
-    if (e.target.name === 'black-time-roster-select') {
-      selectedBlackTimeTutor = e.target.value;
+    if (e.target.matches('input[type="checkbox"]')) {
+      const name = e.target.dataset.name;
+      if (e.target.checked) selectedBlackTimeTutors.add(name);
+      else selectedBlackTimeTutors.delete(name);
     }
+  });
+
+  blackTimeRosterSelectAllBtn.addEventListener('click', () => {
+    blackTimeTutorRoster.forEach((name) => selectedBlackTimeTutors.add(name));
+    renderBlackTimeRoster();
+  });
+
+  blackTimeRosterDeselectAllBtn.addEventListener('click', () => {
+    selectedBlackTimeTutors.clear();
+    renderBlackTimeRoster();
   });
 
   window.api.getSettings().then((settings) => {
@@ -586,8 +631,15 @@ function renderMorningSpecialStatsView(container) {
   });
 
   tutorTimeTestBtn.addEventListener('click', async () => {
-    if (!selectedBlackTimeTutor) {
-      alert('강사명단에서 설정할 강사를 선택해주세요.');
+    const tutorNames = Array.from(selectedBlackTimeTutors);
+    if (tutorNames.length === 0) {
+      alert('강사명단에서 설정할 강사를 한 명 이상 선택해주세요.');
+      return;
+    }
+
+    const weekdays = getSelectedWeekdays();
+    if (weekdays.length === 0) {
+      alert('요일을 하나 이상 선택해주세요.');
       return;
     }
 
@@ -597,18 +649,19 @@ function renderMorningSpecialStatsView(container) {
       return;
     }
 
-    const weekdayLabel = tutorTimeTestWeekdayEl.selectedOptions[0].textContent;
+    const weekdayLabel = weekdays.map((w) => WEEKDAY_LABELS[w]).join('/');
     const stateLabel = tutorTimeTestStateEl.value === 'close' ? '닫기(블랙+그레이 체크)' : '열기(화이트 타임)';
+    const totalCount = tutorNames.length * weekdays.length * slots.length;
     const confirmed = confirm(
-      `${selectedBlackTimeTutor} 강사의 ${weekdayLabel}요일 ${slots.length}개 시간대를 ` +
-        `${stateLabel}(으)로 실제 제출합니다. 계속할까요?`
+      `강사 ${tutorNames.length}명(${tutorNames.join(', ')}) × 요일 ${weekdayLabel} × 시간 ${slots.length}개 ` +
+        `(총 ${totalCount}건)를 ${stateLabel}(으)로 실제 제출합니다. 계속할까요?`
     );
     if (!confirmed) return;
 
     const result = await window.api.startJob({
       jobId: 'tutor_schedule_set',
-      tutorName: selectedBlackTimeTutor,
-      weekday: Number(tutorTimeTestWeekdayEl.value),
+      tutorNames,
+      weekdays,
       state: tutorTimeTestStateEl.value,
       slots: slots.map((s) => ({ hour: s.hour, startMinute: s.startMinute })),
     });
