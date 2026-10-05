@@ -45,5 +45,12 @@ def emit_receipt_check_record(receipt_check: dict) -> None:
     emit({"type": "record", "kind": "receipt_check", "receiptCheck": receipt_check})
 
 
+def emit_tutor_schedule_record(tutor_schedule: dict) -> None:
+    """강사 시간표 슬롯(요일/시간) 하나의 설정이 바뀔 때마다, 바뀌기 전/후 상태를
+    즉시 화면 결과표에 반영할 수 있도록 스트리밍. 사용자가 나중에 실수를 확인할
+    수 있도록 남기는 기록이라 반드시 before/after를 함께 보낸다."""
+    emit({"type": "record", "kind": "tutor_schedule", "tutorSchedule": tutor_schedule})
+
+
 def emit_done(summary: dict) -> None:
     emit({"type": "done", "summary": summary})

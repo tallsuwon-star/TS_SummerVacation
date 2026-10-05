@@ -20,9 +20,12 @@
 (00/10/20분)과 30분 수업(30/40/50분) 두 수업 슬롯에 해당한다. 그래서 "몇 시 수업을 연다"는
 그 수업이 시작하는 분(0 또는 30)부터 10분 단위로 3칸만 묶어서 처리해야 한다.
 
-절대 "작성완료" 제출 버튼은 누르지 않는다 — 사용자가 화면에서 직접 확인하고 제출한다."""
+사용자가 실수를 되짚어볼 수 있도록, 슬롯을 바꾸기 직전의 상태를 먼저 읽어서
+변경 전/후 상태를 함께 반환한다(jobs/tutor_schedule_set.py가 이를 결과표/로그로
+남긴다). 이 작업은 이제 사용자의 명시적 요청에 따라 "작성완료" 제출까지 자동으로
+수행한다(submit_schedule)."""
 
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.common.exceptions import NoAlertPresentException, NoSuchElementException, TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
@@ -46,9 +49,49 @@ EXTRA_TYPE = "3"
 STATE_OPEN = "open"
 STATE_CLOSE = "close"
 
+# <input id="submit" type="button" value="작성완료" class="mws-button red malgungothic12">
+SUBMIT_BUTTON_ID = "submit"
+
 
 class TutorScheduleError(Exception):
     pass
+
+
+def _checkbox_id(hour_str: str, minute: str, weekday_str: str, type_digit: str) -> str:
+    return f"time_{hour_str}{minute}{weekday_str}{type_digit}"
+
+
+def _is_checked(driver, checkbox_id: str) -> bool | None:
+    """체크 여부를 읽는다. 체크박스를 못 찾으면 None(확인 불가)."""
+    try:
+        return driver.find_element(By.ID, checkbox_id).is_selected()
+    except NoSuchElementException:
+        return None
+
+
+def describe_state(black: bool | None, gray: bool | None, extra: bool | None) -> str:
+    """블랙/그레이/M 체크 여부를 사람이 읽을 수 있는 한글 상태 문구로 바꾼다."""
+    if black is None or gray is None:
+        return "확인 불가"
+    if not black and not gray and not extra:
+        return "열림(화이트)"
+    if black and gray:
+        return "닫힘" + ("+M" if extra else "")
+    parts = [f"블랙:{'O' if black else 'X'}", f"그레이:{'O' if gray else 'X'}"]
+    if extra:
+        parts.append("M:O")
+    return f"혼합({', '.join(parts)})"
+
+
+def _dismiss_alert_if_present(driver, timeout: float = 3) -> str | None:
+    try:
+        WebDriverWait(driver, timeout).until(EC.alert_is_present())
+        text = driver.switch_to.alert.text
+        emit_log(f"알림창 감지 후 닫음: {text}")
+        driver.switch_to.alert.accept()
+        return text
+    except (TimeoutException, NoAlertPresentException):
+        return None
 
 
 def open_schedule_checkboxes(driver, timeout: float = 10) -> None:
@@ -88,13 +131,16 @@ def wait_for_schedule_page(driver, timeout: float = 10) -> None:
         raise TutorScheduleError("시간표 체크박스 화면을 찾지 못했습니다.") from exc
 
 
-def set_hour_state(driver, weekday: int, hour: int, state: str, start_minute: int = 0) -> None:
+def set_hour_state(driver, weekday: int, hour: int, state: str, start_minute: int = 0) -> tuple[str, str]:
     """지정한 요일(0=일 ... 6=토)의 지정한 수업(hour시 start_minute분 시작, 10분 단위
     3칸: start_minute/+10/+20)을 열거나 닫는다. start_minute은 0(정시 수업) 또는
     30(30분 수업)만 유효하다.
 
     - open : 블랙(type1)/그레이(type2)/M(type3) 모두 체크 해제 (화이트 타임)
     - close: 블랙(type1)과 그레이(type2)를 모두 체크 (M은 건드리지 않음)
+
+    바꾸기 직전 상태(첫 번째 분 칸 기준)와 바뀐 뒤 상태를 (before_label, after_label)
+    문구로 반환한다 — 호출 측에서 "어떤 상태였는데 어떻게 했다" 기록을 남기는 데 쓴다.
     """
     if state not in (STATE_OPEN, STATE_CLOSE):
         raise ValueError(f"알 수 없는 상태: {state}")
@@ -109,6 +155,13 @@ def set_hour_state(driver, weekday: int, hour: int, state: str, start_minute: in
     weekday_str = str(weekday)
     weekday_name = WEEKDAY_NAMES[weekday]
 
+    first_minute = minute_slots[0]
+    before_label = describe_state(
+        _is_checked(driver, _checkbox_id(hour_str, first_minute, weekday_str, BLACK_TYPE)),
+        _is_checked(driver, _checkbox_id(hour_str, first_minute, weekday_str, GRAY_TYPE)),
+        _is_checked(driver, _checkbox_id(hour_str, first_minute, weekday_str, EXTRA_TYPE)),
+    )
+
     want_checked = {
         BLACK_TYPE: state == STATE_CLOSE,
         GRAY_TYPE: state == STATE_CLOSE,
@@ -117,13 +170,13 @@ def set_hour_state(driver, weekday: int, hour: int, state: str, start_minute: in
         # 화이트 타임(열기)은 블랙/그레이뿐 아니라 세 번째 체크("M")까지 모두 꺼져 있어야 한다.
         want_checked[EXTRA_TYPE] = False
 
-    emit_log(f"{weekday_name}요일 {hour}시({'/'.join(minute_slots)}분)를 "
-             f"{'닫기(블랙+그레이 체크)' if state == STATE_CLOSE else '열기(화이트 타임)'}")
+    after_label = "닫힘" if state == STATE_CLOSE else "열림(화이트)"
+    emit_log(f"{weekday_name}요일 {hour}시({'/'.join(minute_slots)}분): {before_label} -> {after_label}")
 
     changed = False
     for minute in minute_slots:
         for type_digit, should_be_checked in want_checked.items():
-            checkbox_id = f"time_{hour_str}{minute}{weekday_str}{type_digit}"
+            checkbox_id = _checkbox_id(hour_str, minute, weekday_str, type_digit)
             try:
                 checkbox = driver.find_element(By.ID, checkbox_id)
             except NoSuchElementException:
@@ -139,3 +192,23 @@ def set_hour_state(driver, weekday: int, hour: int, state: str, start_minute: in
         driver.execute_script(
             "if (typeof chkMinute === 'function') { chkMinute(arguments[0]); }", hour_str
         )
+
+    return before_label, after_label
+
+
+def submit_schedule(driver, timeout: float = 10) -> None:
+    """"작성완료" 버튼을 눌러 지금까지의 체크박스 변경을 실제로 제출한다.
+
+    사용자가 명시적으로 "설정까지 해달라"고 요청해서 추가된 단계 — 이전에는
+    입력만 해두고 제출은 사용자가 직접 했다. 제출 후 확인 alert가 뜨면 자동으로
+    닫는다."""
+    try:
+        submit_btn = WebDriverWait(driver, timeout).until(
+            EC.element_to_be_clickable((By.ID, SUBMIT_BUTTON_ID))
+        )
+    except TimeoutException as exc:
+        raise TutorScheduleError("'작성완료' 버튼을 찾지 못했습니다.") from exc
+
+    emit_log("'작성완료' 버튼 클릭 (실제 제출)")
+    driver.execute_script("arguments[0].click();", submit_btn)
+    _dismiss_alert_if_present(driver, timeout=5)

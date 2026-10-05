@@ -14,6 +14,18 @@ const TUTOR_ROSTER = [
   'Zelina', 'Amelie', 'Carmit', 'Pops', 'Wency', 'Cassandra', 'Veron',
 ];
 
+// 강사 시간표 화면은 09시~23시까지, 각 시간마다 정시(00분)/30분 두 수업 슬롯이 있다.
+const TUTOR_SCHEDULE_SLOTS = [];
+for (let hour = 9; hour <= 23; hour++) {
+  for (const minute of [0, 30]) {
+    TUTOR_SCHEDULE_SLOTS.push({
+      hour,
+      minute,
+      label: `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`,
+    });
+  }
+}
+
 function renderMorningSpecialStatsView(container) {
   container.innerHTML = `
     <section class="panel">
@@ -36,7 +48,7 @@ function renderMorningSpecialStatsView(container) {
     </section>
 
     <section class="panel">
-      <div class="field-label login-test-label">강사 블랙/그레이/화이트 타임 설정 (로그인 → 시간표관리 → 검색 → SCH → 체크박스 설정, 제출은 직접)</div>
+      <div class="field-label login-test-label">강사 블랙/그레이/화이트 타임 설정 (로그인 → 시간표관리 → 검색 → SCH → 체크박스 설정 → 작성완료 제출까지 자동)</div>
       <div class="tutor-roster-actions">
         <input type="text" id="black-time-roster-input" placeholder="강사 이름 추가 (예: Daheetest)" />
         <button id="black-time-roster-add-btn" type="button" class="btn btn-ghost">추가</button>
@@ -52,21 +64,41 @@ function renderMorningSpecialStatsView(container) {
           <option value="5">금</option>
           <option value="6">토</option>
         </select>
-        <input type="number" id="tutor-time-test-hour" min="0" max="23" value="9" style="width: 4em" />
-        <span>시</span>
-        <select id="tutor-time-test-minute">
-          <option value="0">정시 수업 (00/10/20분)</option>
-          <option value="30">30분 수업 (30/40/50분)</option>
-        </select>
-        <span>를</span>
+        <span>요일을</span>
         <select id="tutor-time-test-state">
           <option value="open">열기 (화이트 타임)</option>
           <option value="close">닫기 (블랙+그레이 체크)</option>
         </select>
-        <button id="tutor-time-test-btn" class="btn btn-primary">설정 실행</button>
+      </div>
+
+      <div class="field-label">적용할 수업 시간 선택 (체크한 시간에만 적용됩니다)</div>
+      <div class="tutor-roster-actions">
+        <input type="text" id="tutor-slot-search" class="roster-search-input" placeholder="시간 검색... (예: 10:)" />
+        <button id="tutor-slot-select-all-btn" type="button" class="btn btn-ghost">전체 선택</button>
+        <button id="tutor-slot-deselect-all-btn" type="button" class="btn btn-ghost">전체 해제</button>
+        <select id="tutor-slot-range-start"></select>
+        <span>~</span>
+        <select id="tutor-slot-range-end"></select>
+        <button id="tutor-slot-range-btn" type="button" class="btn btn-ghost">범위 선택</button>
+      </div>
+      <div id="tutor-slot-grid" class="tutor-roster-grid"></div>
+      <div id="tutor-slot-summary" class="field-hint">선택된 시간 없음</div>
+
+      <div class="inline-row">
+        <button id="tutor-time-test-btn" class="btn btn-primary">설정 실행 (실제 제출됨)</button>
         <button id="tutor-time-test-stop-btn" class="btn btn-danger" disabled>중단</button>
         <span id="tutor-time-test-status" class="status-badge status-pending">대기중</span>
       </div>
+
+      <div class="field-label login-test-label">설정 결과 (이전 상태 → 변경 후 상태, 실수 확인용 기록)</div>
+      <table class="dashboard-table" id="tutor-schedule-results-table">
+        <thead>
+          <tr><th>강사명</th><th>요일</th><th>시간</th><th>이전 상태</th><th>변경 후 상태</th></tr>
+        </thead>
+        <tbody id="tutor-schedule-results-body">
+          <tr><td colspan="5" class="empty">아직 설정한 내역이 없습니다.</td></tr>
+        </tbody>
+      </table>
     </section>
 
     <div class="view-header">
@@ -240,12 +272,20 @@ function renderMorningSpecialStatsView(container) {
   const blackTimeRosterListEl = document.getElementById('black-time-roster-list');
 
   const tutorTimeTestWeekdayEl = document.getElementById('tutor-time-test-weekday');
-  const tutorTimeTestHourEl = document.getElementById('tutor-time-test-hour');
-  const tutorTimeTestMinuteEl = document.getElementById('tutor-time-test-minute');
   const tutorTimeTestStateEl = document.getElementById('tutor-time-test-state');
   const tutorTimeTestBtn = document.getElementById('tutor-time-test-btn');
   const tutorTimeTestStopBtn = document.getElementById('tutor-time-test-stop-btn');
   const tutorTimeTestStatus = document.getElementById('tutor-time-test-status');
+
+  const tutorSlotGrid = document.getElementById('tutor-slot-grid');
+  const tutorSlotSummary = document.getElementById('tutor-slot-summary');
+  const tutorSlotSearchInput = document.getElementById('tutor-slot-search');
+  const tutorSlotSelectAllBtn = document.getElementById('tutor-slot-select-all-btn');
+  const tutorSlotDeselectAllBtn = document.getElementById('tutor-slot-deselect-all-btn');
+  const tutorSlotRangeStartEl = document.getElementById('tutor-slot-range-start');
+  const tutorSlotRangeEndEl = document.getElementById('tutor-slot-range-end');
+  const tutorSlotRangeBtn = document.getElementById('tutor-slot-range-btn');
+  const tutorScheduleResultsBody = document.getElementById('tutor-schedule-results-body');
 
   const startBtn = document.getElementById('start-btn');
   const pauseBtn = document.getElementById('pause-btn');
@@ -303,6 +343,96 @@ function renderMorningSpecialStatsView(container) {
     });
     updateTutorRosterCount();
   });
+
+  tutorSlotGrid.innerHTML = TUTOR_SCHEDULE_SLOTS.map(
+    (slot, idx) => `
+      <div class="tutor-checkbox">
+        <input type="checkbox" id="tutor-slot-chk-${idx}" data-hour="${slot.hour}" data-minute="${slot.minute}" data-label="${slot.label}" />
+        <label for="tutor-slot-chk-${idx}">${slot.label}</label>
+      </div>
+    `
+  ).join('');
+
+  const slotRangeOptions = TUTOR_SCHEDULE_SLOTS.map((slot) => `<option value="${slot.label}">${slot.label}</option>`).join('');
+  tutorSlotRangeStartEl.innerHTML = slotRangeOptions;
+  tutorSlotRangeEndEl.innerHTML = slotRangeOptions;
+  tutorSlotRangeStartEl.value = '10:00';
+  tutorSlotRangeEndEl.value = '23:30';
+
+  function getCheckedSlots() {
+    return Array.from(tutorSlotGrid.querySelectorAll('input[type="checkbox"]:checked')).map((el) => ({
+      hour: Number(el.dataset.hour),
+      startMinute: Number(el.dataset.minute),
+      label: el.dataset.label,
+    }));
+  }
+
+  function updateTutorSlotSummary() {
+    const checked = getCheckedSlots();
+    tutorSlotSummary.textContent = checked.length
+      ? `선택된 시간 (${checked.length}개): ${checked.map((s) => s.label).join(', ')}`
+      : '선택된 시간 없음';
+  }
+
+  tutorSlotGrid.addEventListener('change', updateTutorSlotSummary);
+
+  tutorSlotSearchInput.addEventListener('input', () => {
+    const query = tutorSlotSearchInput.value.trim().toLowerCase();
+    tutorSlotGrid.querySelectorAll('.tutor-checkbox').forEach((row) => {
+      const label = row.querySelector('input[type="checkbox"]').dataset.label.toLowerCase();
+      row.hidden = query.length > 0 && !label.includes(query);
+    });
+  });
+
+  tutorSlotSelectAllBtn.addEventListener('click', () => {
+    tutorSlotGrid.querySelectorAll('input[type="checkbox"]').forEach((el) => {
+      el.checked = true;
+    });
+    updateTutorSlotSummary();
+  });
+
+  tutorSlotDeselectAllBtn.addEventListener('click', () => {
+    tutorSlotGrid.querySelectorAll('input[type="checkbox"]').forEach((el) => {
+      el.checked = false;
+    });
+    updateTutorSlotSummary();
+  });
+
+  tutorSlotRangeBtn.addEventListener('click', () => {
+    const startIdx = TUTOR_SCHEDULE_SLOTS.findIndex((s) => s.label === tutorSlotRangeStartEl.value);
+    const endIdx = TUTOR_SCHEDULE_SLOTS.findIndex((s) => s.label === tutorSlotRangeEndEl.value);
+    if (startIdx === -1 || endIdx === -1 || startIdx > endIdx) {
+      alert('범위가 올바르지 않습니다 (시작 시간이 종료 시간보다 늦을 수 없습니다).');
+      return;
+    }
+    for (let i = startIdx; i <= endIdx; i++) {
+      const chk = document.getElementById(`tutor-slot-chk-${i}`);
+      if (chk) chk.checked = true;
+    }
+    updateTutorSlotSummary();
+  });
+
+  let tutorScheduleResults = [];
+
+  function renderTutorScheduleResults() {
+    if (tutorScheduleResults.length === 0) {
+      tutorScheduleResultsBody.innerHTML = '<tr><td colspan="5" class="empty">아직 설정한 내역이 없습니다.</td></tr>';
+      return;
+    }
+    tutorScheduleResultsBody.innerHTML = tutorScheduleResults
+      .map(
+        (r) => `
+          <tr>
+            <td>${escapeHtml(r.tutor)}</td>
+            <td>${escapeHtml(r.weekday)}</td>
+            <td>${escapeHtml(r.time)}</td>
+            <td>${escapeHtml(r.before)}</td>
+            <td>${escapeHtml(r.after)}</td>
+          </tr>
+        `
+      )
+      .join('');
+  }
 
   let blackTimeTutorRoster = [];
   let selectedBlackTimeTutor = null;
@@ -461,18 +591,34 @@ function renderMorningSpecialStatsView(container) {
       return;
     }
 
+    const slots = getCheckedSlots();
+    if (slots.length === 0) {
+      alert('적용할 시간을 하나 이상 선택해주세요.');
+      return;
+    }
+
+    const weekdayLabel = tutorTimeTestWeekdayEl.selectedOptions[0].textContent;
+    const stateLabel = tutorTimeTestStateEl.value === 'close' ? '닫기(블랙+그레이 체크)' : '열기(화이트 타임)';
+    const confirmed = confirm(
+      `${selectedBlackTimeTutor} 강사의 ${weekdayLabel}요일 ${slots.length}개 시간대를 ` +
+        `${stateLabel}(으)로 실제 제출합니다. 계속할까요?`
+    );
+    if (!confirmed) return;
+
     const result = await window.api.startJob({
       jobId: 'tutor_schedule_set',
       tutorName: selectedBlackTimeTutor,
       weekday: Number(tutorTimeTestWeekdayEl.value),
-      hour: Number(tutorTimeTestHourEl.value),
-      startMinute: Number(tutorTimeTestMinuteEl.value),
       state: tutorTimeTestStateEl.value,
+      slots: slots.map((s) => ({ hour: s.hour, startMinute: s.startMinute })),
     });
     if (!result.started) {
       alert('이미 실행 중인 작업이 있습니다.');
       return;
     }
+
+    tutorScheduleResults = [];
+    renderTutorScheduleResults();
 
     activeJob = 'tutor_schedule_set';
     setTutorTimeTestStatus('진행 중', 'processing');
@@ -562,6 +708,11 @@ function renderMorningSpecialStatsView(container) {
   });
 
   window.api.onJobRecord((data) => {
+    if (data.kind === 'tutor_schedule' && data.tutorSchedule) {
+      tutorScheduleResults.push(data.tutorSchedule);
+      renderTutorScheduleResults();
+      return;
+    }
     collectedRecords.push({ tutor: data.tutor, member: data.member, creditCount: data.credit_count });
     renderRecordsTable();
   });
