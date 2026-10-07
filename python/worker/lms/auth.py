@@ -2,7 +2,7 @@ import json
 import time
 from pathlib import Path
 
-from selenium.common.exceptions import NoAlertPresentException, TimeoutException
+from selenium.common.exceptions import NoAlertPresentException, NoSuchWindowException, TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
@@ -101,33 +101,46 @@ def _cookies_path() -> Path:
 
 
 def _try_restore_session(driver) -> bool:
-    """저장된 쿠키가 있으면 복원을 시도한다. 성공하면 True(로그인 생략 가능)."""
+    """저장된 쿠키가 있으면 복원을 시도한다. 성공하면 True(로그인 생략 가능).
+
+    테스트 중 브라우저 창을 실수로 닫는 등(크롬 창이 사라짐) NoSuchWindowException이
+    나는 경우에도 원인 불명 오류로 작업 전체가 죽지 않도록, 그 경우엔 세션 복원만
+    포기하고 아래 login()의 새 로그인 절차로 넘어가게 False를 반환한다.
+    """
     cookies = _load_saved_cookies()
     if not cookies:
         return False
 
-    # 쿠키는 같은 도메인의 페이지가 열려있어야 추가할 수 있어서, 일단 먼저 접속한다.
-    # 이 시점엔 아직 쿠키가 없으므로 뜨는 alert는 의미 없는(항상 뜨는) 것이라 그냥 닫는다.
-    driver.get(config.LMS_BASE_URL)
-    _dismiss_alert_if_present(driver)
+    try:
+        # 쿠키는 같은 도메인의 페이지가 열려있어야 추가할 수 있어서, 일단 먼저 접속한다.
+        # 이 시점엔 아직 쿠키가 없으므로 뜨는 alert는 의미 없는(항상 뜨는) 것이라 그냥 닫는다.
+        driver.get(config.LMS_BASE_URL)
+        _dismiss_alert_if_present(driver)
 
-    restored_any = False
-    for cookie in cookies:
-        try:
-            driver.add_cookie(_sanitize_cookie_for_selenium(cookie))
-            restored_any = True
-        except Exception:  # noqa: BLE001 - 쿠키 하나가 깨져 있어도 나머지는 계속 시도
-            continue
+        restored_any = False
+        for cookie in cookies:
+            try:
+                driver.add_cookie(_sanitize_cookie_for_selenium(cookie))
+                restored_any = True
+            except Exception:  # noqa: BLE001 - 쿠키 하나가 깨져 있어도 나머지는 계속 시도
+                continue
 
-    if not restored_any:
-        return False
+        if not restored_any:
+            return False
 
-    driver.get(config.LMS_BASE_URL)
+        driver.get(config.LMS_BASE_URL)
 
-    if _dismiss_alert_if_present(driver):
-        # 쿠키를 실은 채로 다시 열었는데도 로그인 요구 alert가 뜨면 세션이 만료된 것.
-        emit_log("저장된 로그인 세션이 만료되어 새로 로그인합니다.")
-        _clear_saved_session()
+        if _dismiss_alert_if_present(driver):
+            # 쿠키를 실은 채로 다시 열었는데도 로그인 요구 alert가 뜨면 세션이 만료된 것.
+            emit_log("저장된 로그인 세션이 만료되어 새로 로그인합니다.")
+            _clear_saved_session()
+            return False
+    except NoSuchWindowException:
+        emit_log(
+            "브라우저 창을 찾을 수 없어 세션 복원을 건너뜁니다 "
+            "(작업 중 창을 직접 닫지는 않으셨는지 확인해주세요). 새로 로그인합니다.",
+            level="warn",
+        )
         return False
 
     emit_log("저장된 로그인 세션을 재사용합니다 (로그인 생략).")
