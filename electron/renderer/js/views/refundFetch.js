@@ -112,6 +112,7 @@ function buildRefundPanel(container) {
             <th>등록일</th>
             <th>내용</th>
             <th>비고</th>
+            <th>캡처 저장</th>
             <th>링크</th>
           </tr>
         </thead>
@@ -308,6 +309,8 @@ function buildRefundPanel(container) {
     consultTableBody.innerHTML = sorted
       .map((r) => {
         const remarks = r.needsReview && r.reviewReason ? escapeHtml(r.reviewReason) : '-';
+        const captureFileName = r.capturePath ? r.capturePath.split(/[\\/]/).pop() : '';
+        const capture = captureFileName ? escapeHtml(captureFileName) : '-';
         const link = r.detailUrl
           ? `<button type="button" class="btn btn-ghost refund-open-link" data-url="${escapeHtml(r.detailUrl)}">열기</button>`
           : '-';
@@ -319,6 +322,7 @@ function buildRefundPanel(container) {
             <td>${escapeHtml(r.registeredDate) || '-'}</td>
             <td>${escapeHtml(r.detailText) || '-'}</td>
             <td>${remarks}</td>
+            <td>${capture}</td>
             <td>${link}</td>
           </tr>
         `;

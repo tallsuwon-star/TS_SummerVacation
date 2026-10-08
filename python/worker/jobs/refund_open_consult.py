@@ -7,6 +7,11 @@
 매출전표가 없어서 금액 일치 여부 대신 키워드 매칭으로 후보를 좁힌다 — 그래서
 항상 사람이 detailUrl을 직접 열어 확인해야 한다.
 
+찾은 글에 회원 요청을 캡처한 스크린샷이 있으면, 그 이미지를 다운로드
+폴더의 오늘 날짜 폴더(예: Downloads/26.10.08, refund_generate.py가 엑셀을
+저장하는 곳과 같은 폴더)에 회원 이름 파일명으로 함께 저장한다. 하루에 같은
+회원 이름으로 여러 번 저장되면 "회원명2"처럼 번호를 붙여 겹치지 않게 한다.
+
 이 작업은 조회만 한다 — LMS 페이지의 삭제/수정 링크는 어디서도 클릭하지
 않는다. 회원마다 새 창(팝업)에 상담관리 화면을 열어두고 검색용 메인 창으로
 돌아와 다음 회원을 검색하는 식으로 진행한다. '중단' 버튼을 누르기 전까지는
@@ -17,9 +22,11 @@ from datetime import date
 
 from ..control import ControlState
 from ..lms.auth import LoginFailedError, login
+from ..lms.consult_capture import save_consult_capture
 from ..lms.driver import build_driver
 from ..lms.member_search import MemberSearchError, open_member_consultation_by_email
 from ..lms.receipt_check import ReceiptCheckError, find_refund_related_entries
+from ..refund.output_dir import dated_output_dir
 from ..utils.progress import emit_done, emit_log, emit_refund_consult_record
 
 JOB_NAME = "refund_open_consult"
@@ -50,6 +57,8 @@ def run(job_payload: dict, control: ControlState) -> None:
         emit_done({"success": False, "error": "missing-target"})
         return
 
+    output_dir = dated_output_dir()
+    emit_log(f"캡처 이미지는 {output_dir} 폴더에 저장됩니다.")
     driver = build_driver()
     opened_count = 0
 
@@ -99,15 +108,20 @@ def run(job_payload: dict, control: ControlState) -> None:
                 )
                 continue
 
+            member_label = target["memberName"] or email
             for entry in entries:
                 if entry["needsReview"]:
                     emit_log(f"  ⚠ 확인 필요: {entry['reviewReason']}", level="warn")
+
+                saved_path = save_consult_capture(driver, entry["detailUrl"], member_label, output_dir)
+
                 emit_refund_consult_record(
                     {
                         "memberEmail": email,
                         "memberName": target["memberName"],
                         "requester": requester,
                         "found": True,
+                        "capturePath": str(saved_path) if saved_path else "",
                         **entry,
                     }
                 )

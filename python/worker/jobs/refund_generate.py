@@ -4,15 +4,17 @@
 떠 있는) refunds 목록을 그대로 받아 파일로 만든다 — 화면에 보인 것과
 실제로 생성되는 파일 내용이 어긋나지 않게 하기 위함이다.
 
-생성된 파일은 곧바로 사용자의 실제 "다운로드" 폴더(Path.home() / "Downloads")에
-저장한다 — 일렉트론 쪽의 저장 대화상자/탐색기 열기에 의존하지 않고 파이썬이
-직접 써서, 그 파일을 바로 찾아 쓸 수 있게 한다. git에는 올라가지 않는다.
-"""
+생성된 파일은 곧바로 사용자의 실제 "다운로드" 폴더 아래 오늘 날짜 폴더
+(예: Downloads/26.10.08)에 저장한다 — 일렉트론 쪽의 저장 대화상자/탐색기
+열기에 의존하지 않고 파이썬이 직접 써서, 그 파일을 바로 찾아 쓸 수 있게
+한다. 같은 날 상담관리에서 찾은 회원 요청 캡처 스크린샷(refund_open_consult.py)도
+이 폴더에 함께 저장되니, 엑셀과 캡처를 날짜별로 한곳에서 볼 수 있다.
+git에는 올라가지 않는다."""
 
 from datetime import date
-from pathlib import Path
 
 from ..control import ControlState
+from ..refund.output_dir import dated_output_dir
 from ..refund.xlsx_writer import generate_expense_forms
 from ..utils.progress import emit_done, emit_log
 
@@ -31,7 +33,7 @@ def run(job_payload: dict, control: ControlState) -> None:
         emit_done({"success": False, "error": "missing-preparer-name"})
         return
 
-    output_dir = Path.home() / "Downloads"
+    output_dir = dated_output_dir()
 
     try:
         output_paths = generate_expense_forms(refunds, preparer_name, output_dir, document_date=date.today())
