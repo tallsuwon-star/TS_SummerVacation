@@ -97,20 +97,29 @@ class MemoEntry:
     category: str
     registered_date: date
     detail_url: str
+    # 환불 건 매칭(find_refund_related_entries)에서만 쓰는, 글의 요약/제목 텍스트.
+    # 카드취소 매칭(check_card_cancel_receipts)은 이 값을 쓰지 않는다.
+    detail_text: str = ""
 
 
 def list_recent_memo_entries(
-    driver, requester_name: str, lookback_days: int = DEFAULT_LOOKBACK_DAYS
+    driver,
+    requester_name: str,
+    lookback_days: int = DEFAULT_LOOKBACK_DAYS,
+    anchor_date: date | None = None,
 ) -> list[MemoEntry]:
     """현재 열려있는 상담관리 화면의 "상담 내용 작성" 목록에서, 작성자가
-    requester_name과 정확히 같고 등록일이 최근 lookback_days일 이내인
-    항목만 찾아 반환한다."""
+    requester_name과 정확히 같은 항목만 찾아 반환한다.
+
+    anchor_date를 주면 그 날짜 기준 앞뒤 lookback_days일 이내(대칭 구간)인
+    항목만, 생략하면 기존 카드취소 확인과 같은 기준(오늘 기준 최근
+    lookback_days일 이내)으로 거른다."""
     try:
         WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, "td.list-type-left")))
     except TimeoutException as exc:
         raise ReceiptCheckError('"상담 내용 작성" 목록을 찾지 못했습니다.') from exc
 
-    cutoff = date.today() - timedelta(days=lookback_days)
+    cutoff = None if anchor_date is not None else date.today() - timedelta(days=lookback_days)
     entries: list[MemoEntry] = []
 
     left_cells = driver.find_elements(By.CSS_SELECTOR, "td.list-type-left")
@@ -148,8 +157,16 @@ def list_recent_memo_entries(
             continue
         year, month, day = (int(g) for g in date_match.groups())
         registered_date = date(year, month, day)
-        if registered_date < cutoff:
+
+        if anchor_date is not None:
+            if abs((registered_date - anchor_date).days) > lookback_days:
+                continue
+        elif registered_date < cutoff:
             continue
+
+        detail_text = (
+            link.get_attribute("title") or link.get_attribute("original-title") or link.text or ""
+        ).strip()
 
         entries.append(
             MemoEntry(
@@ -158,6 +175,7 @@ def list_recent_memo_entries(
                 category=category,
                 registered_date=registered_date,
                 detail_url=detail_url,
+                detail_text=detail_text,
             )
         )
 
@@ -349,6 +367,51 @@ def check_card_cancel_receipts(
                 "matchNote": comparison["note"],
                 "needsReview": needs_review,
                 "reviewReason": review_reason,
+            }
+        )
+
+    return results
+
+
+# 계좌 환불은 카드취소와 달리 대조할 매출전표가 없다. 대신 "요청자 이름이 같고
+# 날짜가 비슷한 상담 내용" 중 실제로 환불 처리를 언급한 글인지를 키워드로
+# 가늠해 사람이 확인할 후보를 좁혀준다 — 금액 일치처럼 단정하지 않고, 키워드가
+# 없으면 항상 needsReview=True로 표시한다.
+DEFAULT_REFUND_LOOKBACK_DAYS = 14
+REFUND_KEYWORDS = ("환불",)
+
+
+def find_refund_related_entries(
+    driver,
+    requester_name: str,
+    anchor_date: date | None = None,
+    lookback_days: int = DEFAULT_REFUND_LOOKBACK_DAYS,
+    keywords: tuple[str, ...] = REFUND_KEYWORDS,
+) -> list[dict]:
+    """현재 열려있는 상담관리 화면에서 요청자 이름이 같고, 등록일이
+    anchor_date(시트에 환불 요청 날짜가 있으면 그 날짜, 없으면 오늘) 기준
+    앞뒤 lookback_days일 이내인 "상담 내용 작성" 글을 찾아, 그 글에 "환불"
+    관련 키워드가 있는지까지 확인해 반환한다. 조건에 맞는 글이 없으면 빈
+    리스트를 반환한다."""
+    entries = list_recent_memo_entries(driver, requester_name, lookback_days, anchor_date=anchor_date)
+    if not entries:
+        emit_log(f'  ⚠ "{requester_name}"님이 작성한 상담 내용 중 날짜가 맞는 글을 찾지 못했습니다.', level="warn")
+        return []
+
+    results = []
+    for entry in entries:
+        keyword_matched = any(keyword in entry.detail_text for keyword in keywords)
+        results.append(
+            {
+                "memoNo": entry.memo_no,
+                "detailUrl": entry.detail_url,
+                "author": entry.author,
+                "category": entry.category,
+                "registeredDate": entry.registered_date.isoformat(),
+                "detailText": entry.detail_text,
+                "keywordMatched": keyword_matched,
+                "needsReview": not keyword_matched,
+                "reviewReason": "" if keyword_matched else "내용에서 '환불' 관련 언급을 찾지 못했습니다 — 직접 확인해주세요.",
             }
         )
 

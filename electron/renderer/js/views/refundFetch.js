@@ -69,6 +69,7 @@ function buildRefundPanel(container) {
       <table class="dashboard-table" id="refund-table">
         <thead>
           <tr>
+            <th><input type="checkbox" id="refund-select-all" /></th>
             <th>회원명</th>
             <th>회원이메일</th>
             <th>환불금액</th>
@@ -77,13 +78,45 @@ function buildRefundPanel(container) {
           </tr>
         </thead>
         <tbody id="refund-table-body">
-          <tr><td colspan="5" class="empty">아직 조회하지 않았습니다.</td></tr>
+          <tr><td colspan="6" class="empty">아직 조회하지 않았습니다.</td></tr>
         </tbody>
       </table>
       <div class="field-label">
         ⚠ 계좌번호의 '-' 구분은 은행별로 흔히 쓰는 형식을 따른 참고값입니다.
         "확인 필요" 표시가 붙은 계좌는 실제 이체 전 반드시 직접 대조해주세요.
       </div>
+      <div class="job-controls">
+        <button id="refund-open-consult-btn" class="btn btn-primary" disabled>선택한 회원 상담관리 열기</button>
+        <button id="refund-consult-stop-btn" class="btn btn-danger" disabled>확인 종료</button>
+      </div>
+      <div class="field-label">
+        체크한 회원의 LMS 상담관리 화면을 열어, 시트의 "요청자"와 이름이 같고
+        (시트에 날짜가 있으면 그 날짜와 비슷한 시기에, 없으면 최근에) 작성된
+        상담 내용 중 "환불" 관련 언급이 있는 글을 찾아 아래에 링크로 보여줍니다.
+        카드취소와 달리 대조할 영수증이 없어 <b>항상 사람이 링크를 직접 열어
+        확인해야 합니다.</b>
+      </div>
+    </section>
+
+    <section class="panel" id="refund-consult-panel" hidden>
+      <div class="field-label">
+        요청자 이름 + 비슷한 날짜로 찾은 상담 내용 후보입니다.
+        <b>자동으로 내용을 확정하지 않으니 링크를 열어 직접 확인해주세요.</b>
+      </div>
+      <table class="dashboard-table" id="refund-consult-table">
+        <thead>
+          <tr>
+            <th>회원명</th>
+            <th>이메일</th>
+            <th>요청자</th>
+            <th>등록일</th>
+            <th>내용</th>
+            <th>비고</th>
+            <th>링크</th>
+          </tr>
+        </thead>
+        <tbody id="refund-consult-table-body"></tbody>
+      </table>
     </section>
 
     <section class="panel">
@@ -118,6 +151,11 @@ function buildRefundPanel(container) {
   const tableBody = container.querySelector('#refund-table-body');
   const refundSearchInput = container.querySelector('#refund-search');
   const refundSearchCount = container.querySelector('#refund-search-count');
+  const selectAllCheckbox = container.querySelector('#refund-select-all');
+  const openConsultBtn = container.querySelector('#refund-open-consult-btn');
+  const consultStopBtn = container.querySelector('#refund-consult-stop-btn');
+  const consultPanel = container.querySelector('#refund-consult-panel');
+  const consultTableBody = container.querySelector('#refund-consult-table-body');
 
   const logOutput = container.querySelector('#log-output');
   const logSearchInput = container.querySelector('#log-search');
@@ -168,9 +206,10 @@ function buildRefundPanel(container) {
     updateLogSearchCount();
   }
 
-  // ---- 환불 대상 표 (검색 필터 포함) ----
+  // ---- 환불 대상 표 (검색 필터 + 상담관리 확인용 체크박스 포함) ----
   let refunds = [];
   let refundSearchQuery = '';
+  let checkedRefundEmails = new Set();
 
   function accountInfoText(refund) {
     if (!refund.bankName && !refund.accountNumberFormatted) return '(계좌정보 확인 필요)';
@@ -182,6 +221,10 @@ function buildRefundPanel(container) {
     generateBtn.disabled = refunds.length === 0;
   }
 
+  function updateConsultButtonState() {
+    openConsultBtn.disabled = checkedRefundEmails.size === 0;
+  }
+
   function renderTable() {
     const query = refundSearchQuery;
     const filtered = refunds.filter((r) => {
@@ -190,14 +233,15 @@ function buildRefundPanel(container) {
     });
 
     if (refunds.length === 0) {
-      tableBody.innerHTML = '<tr><td colspan="5" class="empty">아직 조회하지 않았습니다.</td></tr>';
+      tableBody.innerHTML = '<tr><td colspan="6" class="empty">아직 조회하지 않았습니다.</td></tr>';
       refundSearchCount.textContent = '';
       updateGenerateButtonState();
+      updateConsultButtonState();
       return;
     }
 
     if (filtered.length === 0) {
-      tableBody.innerHTML = '<tr><td colspan="5" class="empty">검색 결과가 없습니다.</td></tr>';
+      tableBody.innerHTML = '<tr><td colspan="6" class="empty">검색 결과가 없습니다.</td></tr>';
     } else {
       tableBody.innerHTML = filtered
         .map((r) => {
@@ -207,8 +251,10 @@ function buildRefundPanel(container) {
           const copyBtn = r.accountNumberFormatted
             ? `<button type="button" class="btn btn-ghost copy-account-btn" data-copy="${escapeHtml(r.accountNumberFormatted)}">복사</button>`
             : '';
+          const checked = checkedRefundEmails.has(r.memberEmail) ? 'checked' : '';
           return `
             <tr class="${r.needsReview ? 'row-failed' : ''}">
+              <td><input type="checkbox" class="refund-row-check" data-email="${escapeHtml(r.memberEmail)}" ${checked} /></td>
               <td>${escapeHtml(r.memberName) || '-'}</td>
               <td>${escapeHtml(r.memberEmail) || '-'}</td>
               <td>${escapeHtml(r.refundAmount) || '-'}</td>
@@ -220,13 +266,110 @@ function buildRefundPanel(container) {
         .join('');
     }
 
+    tableBody.querySelectorAll('.refund-row-check').forEach((checkbox) => {
+      checkbox.addEventListener('change', () => {
+        const email = checkbox.dataset.email;
+        if (checkbox.checked) checkedRefundEmails.add(email);
+        else checkedRefundEmails.delete(email);
+        updateConsultButtonState();
+      });
+    });
+
     if (query) {
       refundSearchCount.textContent = `${filtered.length} / ${refunds.length}건 일치`;
     } else {
       refundSearchCount.textContent = `총 ${refunds.length}건`;
     }
     updateGenerateButtonState();
+    updateConsultButtonState();
   }
+
+  selectAllCheckbox.addEventListener('change', () => {
+    if (selectAllCheckbox.checked) {
+      refunds.forEach((r) => checkedRefundEmails.add(r.memberEmail));
+    } else {
+      checkedRefundEmails.clear();
+    }
+    renderTable();
+  });
+
+  // ---- 상담관리 확인 결과 (요청자 + 비슷한 날짜 + "환불" 키워드 후보) ----
+  let refundConsults = [];
+
+  function renderRefundConsultTable() {
+    if (refundConsults.length === 0) {
+      consultPanel.hidden = true;
+      return;
+    }
+    consultPanel.hidden = false;
+
+    const sorted = [...refundConsults].sort((a, b) => (a.memberEmail || '').localeCompare(b.memberEmail || ''));
+
+    consultTableBody.innerHTML = sorted
+      .map((r) => {
+        const remarks = r.needsReview && r.reviewReason ? escapeHtml(r.reviewReason) : '-';
+        const link = r.detailUrl
+          ? `<button type="button" class="btn btn-ghost refund-open-link" data-url="${escapeHtml(r.detailUrl)}">열기</button>`
+          : '-';
+        return `
+          <tr class="${r.needsReview ? 'row-failed' : ''}">
+            <td>${escapeHtml(r.memberName) || '-'}</td>
+            <td>${escapeHtml(r.memberEmail) || '-'}</td>
+            <td>${escapeHtml(r.requester) || '-'}</td>
+            <td>${escapeHtml(r.registeredDate) || '-'}</td>
+            <td>${escapeHtml(r.detailText) || '-'}</td>
+            <td>${remarks}</td>
+            <td>${link}</td>
+          </tr>
+        `;
+      })
+      .join('');
+
+    consultTableBody.querySelectorAll('.refund-open-link').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        window.api.openExternal(btn.dataset.url);
+      });
+    });
+  }
+
+  async function startRefundConsultJob(targets) {
+    logOutput.innerHTML = '';
+    refundConsults = [];
+    renderRefundConsultTable();
+
+    const result = await window.api.startJob({ jobId: 'refund_open_consult', targets });
+    if (!result.started) {
+      alert('이미 실행 중인 작업이 있습니다.');
+      return;
+    }
+
+    currentJobId = 'refund_open_consult';
+    startBtn.disabled = true;
+    generateBtn.disabled = true;
+    openConsultBtn.disabled = true;
+    consultStopBtn.disabled = false;
+  }
+
+  openConsultBtn.addEventListener('click', () => {
+    if (checkedRefundEmails.size === 0) {
+      alert('먼저 확인할 회원을 체크해주세요.');
+      return;
+    }
+    const targets = refunds
+      .filter((r) => checkedRefundEmails.has(r.memberEmail))
+      .map((r) => ({
+        memberEmail: r.memberEmail,
+        memberName: r.memberName,
+        requester: r.requester,
+        requestDate: r.requestDate,
+      }));
+    startRefundConsultJob(targets);
+  });
+
+  consultStopBtn.addEventListener('click', async () => {
+    await window.api.stopJob();
+    consultStopBtn.disabled = true;
+  });
 
   // 표 전체에 한 번만 위임해서 등록 — renderTable이 다시 그려도 버튼 클릭이
   // 계속 동작한다. 계좌번호만 복사해서 뱅킹 앱의 "계좌번호" 입력창에 바로
@@ -262,7 +405,11 @@ function buildRefundPanel(container) {
 
   startBtn.addEventListener('click', async () => {
     refunds = [];
+    checkedRefundEmails.clear();
+    selectAllCheckbox.checked = false;
+    refundConsults = [];
     renderTable();
+    renderRefundConsultTable();
     logOutput.innerHTML = '';
 
     const result = await window.api.startJob({ jobId: 'refund_fetch' });
@@ -304,9 +451,15 @@ function buildRefundPanel(container) {
     });
 
     window.api.onJobRecord((data) => {
-      if (data.kind !== 'refund' || !data.refund) return;
-      refunds.push(data.refund);
-      renderTable();
+      if (data.kind === 'refund' && data.refund) {
+        refunds.push(data.refund);
+        renderTable();
+        return;
+      }
+      if (data.kind === 'refund_consult' && data.refundConsult) {
+        refundConsults.push(data.refundConsult);
+        renderRefundConsultTable();
+      }
     });
 
     window.api.onJobDone(async (data) => {
@@ -326,6 +479,8 @@ function buildRefundPanel(container) {
       appendLog('info', `작업 프로세스 종료 (종료 코드: ${data.code})`);
       startBtn.disabled = false;
       updateGenerateButtonState();
+      updateConsultButtonState();
+      consultStopBtn.disabled = true;
       currentJobId = null;
     });
   }

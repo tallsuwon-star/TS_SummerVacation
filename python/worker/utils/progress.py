@@ -45,6 +45,12 @@ def emit_receipt_check_record(receipt_check: dict) -> None:
     emit({"type": "record", "kind": "receipt_check", "receiptCheck": receipt_check})
 
 
+def emit_refund_consult_record(refund_consult: dict) -> None:
+    """계좌 환불 대상 회원의 상담관리에서 찾은 "요청자 + 비슷한 날짜" 상담
+    내용 후보 한 건이 확정될 때마다 즉시 화면 표에 반영할 수 있도록 스트리밍."""
+    emit({"type": "record", "kind": "refund_consult", "refundConsult": refund_consult})
+
+
 def emit_tutor_schedule_record(tutor_schedule: dict) -> None:
     """강사 시간표 슬롯(요일/시간) 하나의 설정이 바뀔 때마다, 바뀌기 전/후 상태를
     즉시 화면 결과표에 반영할 수 있도록 스트리밍. 사용자가 나중에 실수를 확인할

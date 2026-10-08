@@ -21,6 +21,7 @@
 """
 
 import re
+from datetime import date, datetime
 from io import BytesIO
 
 import openpyxl
@@ -41,6 +42,10 @@ COLOR_TOLERANCE = 10
 NAME_HEADER_CANDIDATES = ["회원 이름", "회원명", "이름"]
 EMAIL_HEADER_CANDIDATES = ["ID", "이메일", "회원 ID", "회원 이메일"]
 AMOUNT_HEADER_CANDIDATES = ["환불금액", "환불 금액"]
+# 카드 환불 섹션과 같은 이름("요청자")을 계좌 환불 섹션에도 그대로 쓸 수 있어 공용으로 둔다.
+REQUESTER_HEADER_CANDIDATES = ["요청자"]
+# 상담관리에서 "비슷한 날짜"를 찾을 기준이 될 날짜 칸. 시트마다 이름이 다를 수 있어 후보를 넓게 둔다.
+DATE_HEADER_CANDIDATES = ["날짜", "처리날짜", "요청일", "신청일", "환불일", "환불 날짜", "요청날짜"]
 
 # 카드취소("카드 환불") 섹션. 계좌 환불 섹션과 같은 시트 안의 다른 섹션이며,
 # 헤더가 2줄로 나뉘어 있다 — 앞줄(섹션 제목이 있는 줄)에 "신규/기존"/"사유"/
@@ -48,7 +53,6 @@ AMOUNT_HEADER_CANDIDATES = ["환불금액", "환불 금액"]
 # 앞쪽 컬럼명이 적혀 있다. 계좌 환불처럼 별도 계좌정보 칸이 없다(카드
 # 취소라 계좌이체가 필요 없음) — 대신 사유/내용을 확인용으로 보여준다.
 CARD_SECTION_TITLE = "카드 환불"
-CARD_REQUESTER_HEADER_CANDIDATES = ["요청자"]
 CARD_REASON_TYPE_HEADER_CANDIDATES = ["사유"]
 CARD_DETAIL_HEADER_CANDIDATES = ["내용(퇴원,수업변경,수업 취소의 자세한 사유 / 금액)", "내용"]
 
@@ -120,6 +124,40 @@ def _find_section_sheet(workbook, title: str = SECTION_TITLE):
                 if _cell_text(cell) == title:
                     return worksheet, cell.row
     return None, None
+
+
+def _parse_sheet_date(cell) -> date | None:
+    """날짜 칸 값을 date로 변환한다. 구글 시트가 실제 날짜로 입력된 칸은
+    openpyxl이 datetime/date로 그대로 읽어주지만, 텍스트로 "10/2"나
+    "2026-10-02"처럼 적힌 경우도 있어 흔한 형식 몇 가지를 추가로 시도한다.
+    연도가 없는 "월/일" 형식은 올해로 간주한다. 못 알아보면 None."""
+    value = cell.value
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+
+    text = _cell_text(cell)
+    if not text:
+        return None
+
+    match = re.match(r"^(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})", text)
+    if match:
+        year, month, day = (int(g) for g in match.groups())
+        try:
+            return date(year, month, day)
+        except ValueError:
+            return None
+
+    match = re.match(r"^(\d{1,2})[.\-/](\d{1,2})$", text)
+    if match:
+        month, day = (int(g) for g in match.groups())
+        try:
+            return date(date.today().year, month, day)
+        except ValueError:
+            return None
+
+    return None
 
 
 def _find_header_index(headers: list[str], candidates: list[str]) -> int | None:
@@ -238,9 +276,17 @@ def fetch_pending_refunds() -> list[dict]:
     name_idx = _find_header_index(headers, NAME_HEADER_CANDIDATES)
     email_idx = _find_header_index(headers, EMAIL_HEADER_CANDIDATES)
     amount_idx = _find_header_index(headers, AMOUNT_HEADER_CANDIDATES)
+    # 상담관리에서 "요청자 + 비슷한 날짜"로 글을 찾을 때 쓴다 (refund_open_consult 작업).
+    # 시트에 이 컬럼이 없어도 괜찮다 — 그러면 그냥 못 찾은 채로 빈 값이 된다.
+    requester_idx = _find_header_index(headers, REQUESTER_HEADER_CANDIDATES)
+    date_idx = _find_header_index(headers, DATE_HEADER_CANDIDATES)
 
     if status_idx is None:
         raise ValueError(f'헤더에서 "처리유무" 컬럼을 찾지 못했습니다. 헤더: {headers}')
+
+    # 계좌정보는 "행에서 값이 있는 마지막 칸"으로 간주하는데, 요청자/날짜 칸이
+    # 그 뒤에 있으면 계좌정보로 잘못 집힐 수 있어 후보에서 제외한다.
+    excluded_account_indices = {i for i in (requester_idx, date_idx) if i is not None}
 
     results: list[dict] = []
     for row_cells in worksheet.iter_rows(min_row=header_row_num + 1):
@@ -265,7 +311,7 @@ def fetch_pending_refunds() -> list[dict]:
         # 계좌정보 칸은 헤더명이 통일돼 있지 않을 수 있어(개인정보라 자유
         # 서식으로 적히는 경우가 많음), 행에서 값이 있는 마지막 칸을
         # 계좌정보로 간주한다 (사용자 설명: "우측에 계좌정보들이 나와있음").
-        non_empty_indices = [i for i, text in enumerate(row_texts) if text]
+        non_empty_indices = [i for i, text in enumerate(row_texts) if text and i not in excluded_account_indices]
         account_info_idx = non_empty_indices[-1] if non_empty_indices else None
         account_info_raw = row_texts[account_info_idx] if account_info_idx is not None else ""
 
@@ -275,11 +321,17 @@ def fetch_pending_refunds() -> list[dict]:
         else:
             dash_result = {"formatted": parsed["account_number"], "verified": False}
 
+        request_date = None
+        if date_idx is not None and date_idx < len(row_cells):
+            request_date = _parse_sheet_date(row_cells[date_idx])
+
         results.append(
             {
                 "memberName": member_name,
                 "memberEmail": member_email,
                 "refundAmount": row_texts[amount_idx] if amount_idx is not None and amount_idx < len(row_texts) else "",
+                "requester": _row_value(row_texts, requester_idx),
+                "requestDate": request_date.isoformat() if request_date else "",
                 "memo": parsed["memo"],
                 "shortReason": _short_reason(parsed["memo"]),
                 "rawText": account_info_raw,
@@ -326,7 +378,7 @@ def fetch_pending_card_cancellations() -> list[dict]:
     status_idx = _find_header_index(combined_headers, STATUS_HEADER_CANDIDATES)
     name_idx = _find_header_index(combined_headers, NAME_HEADER_CANDIDATES)
     email_idx = _find_header_index(combined_headers, EMAIL_HEADER_CANDIDATES)
-    requester_idx = _find_header_index(combined_headers, CARD_REQUESTER_HEADER_CANDIDATES)
+    requester_idx = _find_header_index(combined_headers, REQUESTER_HEADER_CANDIDATES)
     amount_idx = _find_header_index(combined_headers, AMOUNT_HEADER_CANDIDATES)
     reason_type_idx = _find_header_index(combined_headers, CARD_REASON_TYPE_HEADER_CANDIDATES)
     detail_idx = _find_header_index(combined_headers, CARD_DETAIL_HEADER_CANDIDATES)
