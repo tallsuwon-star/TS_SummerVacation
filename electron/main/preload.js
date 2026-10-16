@@ -59,4 +59,7 @@ contextBridge.exposeInMainWorld('api', {
 
   // 매출전표 상세보기 등 LMS 링크를 기본 브라우저로 연다.
   openExternal: (url) => ipcRenderer.invoke('link:openExternal', url),
+
+  // 교재 관리: 도로명주소(juso.go.kr) API로 실제 존재하는 주소인지 확인.
+  checkRoadAddress: (address, apiKey) => ipcRenderer.invoke('address:checkRoad', { address, apiKey }),
 });

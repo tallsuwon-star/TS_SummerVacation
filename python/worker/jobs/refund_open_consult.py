@@ -26,7 +26,7 @@ from ..lms.consult_capture import save_consult_capture
 from ..lms.driver import build_driver
 from ..lms.member_search import MemberSearchError, open_member_consultation_by_email
 from ..lms.receipt_check import ReceiptCheckError, find_refund_related_entries
-from ..refund.output_dir import dated_output_dir
+from ..utils.output_dir import dated_output_dir
 from ..utils.progress import emit_done, emit_log, emit_refund_consult_record
 
 JOB_NAME = "refund_open_consult"

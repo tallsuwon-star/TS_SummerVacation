@@ -33,6 +33,9 @@ const store = new Store({
     anthropicApiKey: '',
     // 환불 지출결의서에 적을 담당자/청구자 이름(마지막 입력값 기억).
     refundPreparerName: '이성규',
+    // 교재 관리 화면의 "주소 확인" 버튼이 쓰는 도로명주소(juso.go.kr) 오픈
+    // API 승인키. https://www.juso.go.kr 에서 직접 발급받아 입력해야 한다.
+    roadAddressApiKey: '',
   },
 });
 

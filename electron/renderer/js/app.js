@@ -6,6 +6,7 @@ const VIEW_RENDERERS = {
   naver_store_report: (container) => window.renderNaverStoreReportView(container),
   work_report: (container) => window.renderWorkReportView(container),
   refund_fetch: (container) => window.renderRefundFetchView(container),
+  book_fetch: (container) => window.renderBookShippingView(container),
 };
 
 function renderView(jobId) {

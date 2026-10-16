@@ -8,6 +8,7 @@ const gitLog = require('./gitLog');
 const officeReports = require('./officeReports');
 const anthropicClient = require('./anthropic');
 const fileSave = require('./fileSave');
+const roadAddress = require('./roadAddress');
 
 function registerIpcHandlers(mainWindow) {
   ipcMain.handle('settings:get', () => store.store);
@@ -34,6 +35,8 @@ function registerIpcHandlers(mainWindow) {
 
   ipcMain.handle('file:reveal', (_event, sourcePath) => fileSave.revealFile(sourcePath));
   ipcMain.handle('link:openExternal', (_event, url) => fileSave.openExternal(url));
+
+  ipcMain.handle('address:checkRoad', (_event, { address, apiKey }) => roadAddress.checkRoadAddress(address, apiKey));
 }
 
 module.exports = registerIpcHandlers;

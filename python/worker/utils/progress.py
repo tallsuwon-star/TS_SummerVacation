@@ -58,5 +58,11 @@ def emit_tutor_schedule_record(tutor_schedule: dict) -> None:
     emit({"type": "record", "kind": "tutor_schedule", "tutorSchedule": tutor_schedule})
 
 
+def emit_book_record(book: dict) -> None:
+    """교재 배송 대상(받는분 이름/전화번호/주소) 한 건이 확정될 때마다 즉시
+    화면 표에 반영할 수 있도록 스트리밍."""
+    emit({"type": "record", "kind": "book", "book": book})
+
+
 def emit_done(summary: dict) -> None:
     emit({"type": "done", "summary": summary})
