@@ -14,6 +14,7 @@ from .jobs import (
     book_generate,
     book_invoice_parse,
     book_invoice_write,
+    book_mark_shipped,
     book_open_page,
     card_cancel_fetch,
     card_cancel_open_consult,
@@ -55,6 +56,7 @@ JOBS = {
     "book_generate": book_generate.run,
     "book_invoice_parse": book_invoice_parse.run,
     "book_invoice_write": book_invoice_write.run,
+    "book_mark_shipped": book_mark_shipped.run,
 }
 
 

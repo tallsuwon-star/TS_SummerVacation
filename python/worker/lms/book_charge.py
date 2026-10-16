@@ -27,16 +27,24 @@ classAppVocakingView=Y(보카킹통합신청교재표시)를 포함해, 사람�
 이름/전화가 비어있는 행(예: 결제금액 0원인 오래된 네이버 연동 테스트성
 데이터)이나 주소가 비어있는("(  )") 행은 실제로 보낼 수 없는 주소라
 needsReview=True로 표시해 사람이 직접 확인하게 한다 — 조용히 빈 값으로
-엑셀에 들어가지 않도록 하기 위함이다."""
+엑셀에 들어가지 않도록 하기 위함이다.
+
+각 행에는 주문번호(예: "B1791978086-892")가 "주문자정보" 칸 안
+<p class="text-muted mb-0">에 들어있다. 이 주문번호로 주문 상세 화면
+(book_charge_detail.php?&order_id=...)에 들어가면 배송상태를 '배송중'으로
+바꾸고 송장번호를 입력해 저장할 수 있다(set_order_shipped) — 택배사에서
+받은 송장 엑셀을 업로드해 전화번호로 주문을 찾아 자동으로 처리하는
+book_mark_shipped.py 작업이 쓴다."""
 
 import re
+import time
 from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support.ui import Select, WebDriverWait
 
 from .. import config
 from ..utils.progress import emit_log
@@ -46,9 +54,13 @@ BOOK_CHARGE_LIST_QUERY = (
     "page_count=&find_decision=&arrange_type=reg_date&desc_type=DESC&purchasePlace=ALL"
     "&order_status=ALL&sign_sw=10&classAppVocakingView=Y&sel_text=&sel_search=name"
 )
+BOOK_CHARGE_DETAIL_PATH = "/edu/admin_common/shop_book/book_charge_detail.php"
 
 STATUS_READY = "준비"
 STATUS_SHIPPING = "배송중"
+
+# 주문 상세 화면의 배송상태 <select name="order_status"> value.
+ORDER_STATUS_VALUE = {"준비": "1", STATUS_SHIPPING: "5", "배송완료": "10", "취소": "15"}
 
 # "이름: 이소이, 전화: 010-8240-9070 ( 4714 ) 서울 ..." (상태 span/배송추적
 # 버튼을 제거한 뒤의 텍스트) 형태에서 이름/전화/주소를 뽑는다. 전화번호가
@@ -71,6 +83,10 @@ def book_charge_list_url() -> str:
     return f"{_lms_root()}{BOOK_CHARGE_LIST_PATH}?{BOOK_CHARGE_LIST_QUERY}"
 
 
+def book_charge_detail_url(order_id: str) -> str:
+    return f"{_lms_root()}{BOOK_CHARGE_DETAIL_PATH}?&order_id={order_id}"
+
+
 def open_book_charge_list(driver) -> None:
     """교재상품 결제확인 화면으로 이동한다. 표가 안 뜨면 BookChargeError."""
     emit_log("교재상품 결제확인 화면 여는 중")
@@ -89,6 +105,13 @@ def _find_ship_info_cell(row):
         if td.find("span", class_="label"):
             return td
     return None
+
+
+def _find_order_id(row) -> str:
+    """행의 "주문자정보" 칸 안 <p class="text-muted mb-0">에 들어있는
+    주문번호(예: "B1791978086-892")를 찾는다. 못 찾으면 빈 문자열."""
+    tag = row.find("p", class_="text-muted")
+    return tag.get_text(strip=True) if tag else ""
 
 
 def _row_status(ship_cell) -> str | None:
@@ -176,6 +199,7 @@ def fetch_pending_book_orders(driver) -> list[dict]:
             continue
 
         ship_info = _parse_ship_info(ship_cell)
+        ship_info["orderId"] = _find_order_id(row)
         if ship_info["needsReview"]:
             emit_log(f"  ⚠ {ship_info['reviewReason']} (원문: {ship_info['rawText'][:80]})", level="warn")
 
@@ -188,3 +212,56 @@ def fetch_pending_book_orders(driver) -> list[dict]:
         )
 
     return orders
+
+
+def set_order_shipped(driver, order_id: str, invoice_no: str) -> None:
+    """주문 상세 화면(book_charge_detail.php)에서 배송상태를 '배송중'으로
+    바꾸고 송장번호를 입력한 뒤 저장한다 — 사용자가 직접 확인해준 순서
+    그대로("배송상태/송장번호 옆의 '준비'를 '배송중'으로, 송장번호 입력,
+    저장하기") 재현한다.
+
+    실제로 LMS 데이터를 바꾸는(POST 제출) 동작이다. 저장 후 화면에
+    배송상태가 정말 '배송중'으로 바뀌었는지까지 다시 확인하고, 안 바뀌었으면
+    BookChargeError를 낸다 — 제출은 됐는데 조용히 실패한 상태로 넘어가지
+    않기 위해서다."""
+    if not order_id:
+        raise BookChargeError("주문번호가 없어 처리할 수 없습니다.")
+
+    driver.get(book_charge_detail_url(order_id))
+
+    try:
+        status_select_el = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "select[name='order_status']"))
+        )
+    except TimeoutException as exc:
+        raise BookChargeError(f"주문 상세 화면(주문번호 {order_id})을 불러오지 못했습니다.") from exc
+
+    Select(status_select_el).select_by_value(ORDER_STATUS_VALUE[STATUS_SHIPPING])
+
+    try:
+        invoice_input = driver.find_element(By.CSS_SELECTOR, "input[name='to_invoice']")
+    except NoSuchElementException as exc:
+        raise BookChargeError(f"송장번호 입력란을 찾지 못했습니다 (주문번호 {order_id}).") from exc
+    invoice_input.clear()
+    invoice_input.send_keys(invoice_no)
+
+    try:
+        save_button = driver.find_element(
+            By.XPATH, "//button[@type='submit' and contains(normalize-space(.), '저장하기')]"
+        )
+    except NoSuchElementException as exc:
+        raise BookChargeError(f"저장하기 버튼을 찾지 못했습니다 (주문번호 {order_id}).") from exc
+    save_button.click()
+
+    time.sleep(config.REQUEST_DELAY_SECONDS)
+
+    try:
+        status_select_el = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "select[name='order_status']"))
+        )
+    except TimeoutException as exc:
+        raise BookChargeError(f"저장 후 화면을 다시 확인하지 못했습니다 (주문번호 {order_id}).") from exc
+
+    saved_value = Select(status_select_el).first_selected_option.get_attribute("value")
+    if saved_value != ORDER_STATUS_VALUE[STATUS_SHIPPING]:
+        raise BookChargeError(f"저장했지만 배송상태가 '배송중'으로 바뀌지 않았습니다 (주문번호 {order_id}).")

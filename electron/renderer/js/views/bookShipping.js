@@ -91,6 +91,29 @@ function renderBookShippingView(container) {
         기록합니다. 이 시트에 서비스 계정 이메일이 '편집자'로 공유돼 있어야
         기록이 됩니다.
       </div>
+      <div class="job-controls">
+        <button id="book-mark-shipped-btn" class="btn btn-primary" disabled>LMS에 배송중 처리</button>
+      </div>
+      <div class="field-label">
+        위 표의 전화번호로 LMS의 '준비' 상태 주문을 찾아 배송상태를
+        '배송중'으로 바꾸고 송장번호를 입력해 저장합니다.
+        <b>LMS 데이터를 실제로 바꾸는 동작입니다.</b> 전화번호가 같은
+        '준비' 주문이 여러 건이거나 일치하는 주문을 못 찾으면 자동으로
+        처리하지 않고 "확인 필요"로 표시하니, 그 건은 LMS에서 직접
+        처리해주세요.
+      </div>
+      <table class="dashboard-table" id="book-mark-shipped-table" hidden>
+        <thead>
+          <tr>
+            <th>받는분</th>
+            <th>받는분전화번호</th>
+            <th>운송장번호</th>
+            <th>주문번호</th>
+            <th>결과</th>
+          </tr>
+        </thead>
+        <tbody id="book-mark-shipped-table-body"></tbody>
+      </table>
     </section>
 
     <section class="panel">
@@ -118,6 +141,9 @@ function renderBookShippingView(container) {
   const invoiceSearchInput = container.querySelector('#book-invoice-search');
   const invoiceSearchCount = container.querySelector('#book-invoice-search-count');
   const invoiceTableBody = container.querySelector('#book-invoice-table-body');
+  const markShippedBtn = container.querySelector('#book-mark-shipped-btn');
+  const markShippedTable = container.querySelector('#book-mark-shipped-table');
+  const markShippedTableBody = container.querySelector('#book-mark-shipped-table-body');
 
   const logOutput = container.querySelector('#book-log-output');
   const logSearchInput = container.querySelector('#book-log-search');
@@ -335,6 +361,7 @@ function renderBookShippingView(container) {
 
   function updateInvoiceWriteButtonState() {
     invoiceWriteBtn.disabled = invoiceRows.length === 0;
+    markShippedBtn.disabled = invoiceRows.length === 0;
   }
 
   function renderInvoiceTable() {
@@ -420,6 +447,61 @@ function renderBookShippingView(container) {
     invoiceWriteBtn.disabled = true;
   });
 
+  // ---- LMS에 배송중 처리 (전화번호로 '준비' 주문 대조 후 상태+송장번호 저장) ----
+  let markShippedResults = [];
+
+  function renderMarkShippedTable() {
+    if (markShippedResults.length === 0) {
+      markShippedTable.hidden = true;
+      return;
+    }
+    markShippedTable.hidden = false;
+    markShippedTableBody.innerHTML = markShippedResults
+      .map((r) => {
+        const resultCell = r.success
+          ? '<span class="status-badge status-success">완료</span>'
+          : `<span class="status-badge status-failed">확인 필요</span><br><small>${escapeHtml(r.reason)}</small>`;
+        return `
+          <tr class="${r.success ? '' : 'row-failed'}">
+            <td>${escapeHtml(r.recipientName) || '-'}</td>
+            <td>${escapeHtml(r.recipientPhone) || '-'}</td>
+            <td>${escapeHtml(r.invoiceNo) || '-'}</td>
+            <td>${escapeHtml(r.orderId) || '-'}</td>
+            <td>${resultCell}</td>
+          </tr>
+        `;
+      })
+      .join('');
+  }
+
+  markShippedBtn.addEventListener('click', async () => {
+    if (invoiceRows.length === 0) {
+      alert('먼저 송장 파일을 읽어주세요.');
+      return;
+    }
+    if (
+      !confirm(
+        `표에 보이는 ${invoiceRows.length}건의 전화번호로 LMS의 '준비' 주문을 찾아 '배송중'으로 바꾸고 송장번호를 저장할까요?\nLMS 데이터를 실제로 바꾸는 동작입니다.`
+      )
+    ) {
+      return;
+    }
+
+    markShippedResults = [];
+    renderMarkShippedTable();
+    logOutput.innerHTML = '';
+
+    const result = await window.api.startJob({ jobId: 'book_mark_shipped', invoiceRows });
+    if (!result.started) {
+      alert('이미 실행 중인 작업이 있습니다.');
+      return;
+    }
+
+    currentJobId = 'book_mark_shipped';
+    markShippedBtn.disabled = true;
+    stopBtn.disabled = false;
+  });
+
   function attachListeners() {
     window.api.onJobLog((data) => {
       appendLog(data.level || 'info', data.message || '');
@@ -434,6 +516,11 @@ function renderBookShippingView(container) {
       if (data.kind === 'book_invoice' && data.bookInvoice) {
         invoiceRows.push(data.bookInvoice);
         renderInvoiceTable();
+        return;
+      }
+      if (data.kind === 'book_mark_shipped' && data.bookMarkShipped) {
+        markShippedResults.push(data.bookMarkShipped);
+        renderMarkShippedTable();
       }
     });
 
@@ -447,6 +534,9 @@ function renderBookShippingView(container) {
         }
         if (currentJobId === 'book_invoice_write' && data.writtenCount) {
           appendLog('info', `구글 시트 기록 완료: ${data.writtenCount}건`);
+        }
+        if (currentJobId === 'book_mark_shipped' && typeof data.succeededCount !== 'undefined') {
+          appendLog('info', `LMS 배송중 처리 완료: ${data.succeededCount}/${data.processedCount}건`);
         }
         return;
       }
