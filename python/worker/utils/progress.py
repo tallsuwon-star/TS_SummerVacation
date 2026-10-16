@@ -64,5 +64,12 @@ def emit_book_record(book: dict) -> None:
     emit({"type": "record", "kind": "book", "book": book})
 
 
+def emit_book_invoice_record(book_invoice: dict) -> None:
+    """택배사 송장 업로드에서 한 행(받는분/전화/주소/운송장번호 + 구글
+    시트에 그대로 쓸 원본 행 rawRow)이 확정될 때마다 즉시 화면 표에
+    반영할 수 있도록 스트리밍."""
+    emit({"type": "record", "kind": "book_invoice", "bookInvoice": book_invoice})
+
+
 def emit_done(summary: dict) -> None:
     emit({"type": "done", "summary": summary})

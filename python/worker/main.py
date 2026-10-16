@@ -12,6 +12,8 @@ from .control import ControlState
 from .jobs import (
     book_fetch,
     book_generate,
+    book_invoice_parse,
+    book_invoice_write,
     book_open_page,
     card_cancel_fetch,
     card_cancel_open_consult,
@@ -51,6 +53,8 @@ JOBS = {
     "book_fetch": book_fetch.run,
     "book_open_page": book_open_page.run,
     "book_generate": book_generate.run,
+    "book_invoice_parse": book_invoice_parse.run,
+    "book_invoice_write": book_invoice_write.run,
 }
 
 

@@ -53,6 +53,47 @@ function renderBookShippingView(container) {
     </section>
 
     <section class="panel">
+      <div class="view-header">
+        <div class="job-controls">
+          <input type="file" id="book-invoice-file-input" accept=".xlsx" />
+          <button id="book-invoice-parse-btn" class="btn btn-primary" disabled>송장 파일 읽기</button>
+        </div>
+      </div>
+      <div class="field-label">
+        택배사 사이트에서 "발송처리" 후 내려받은 송장 엑셀 파일을 선택하면,
+        첫 줄(헤더)을 뺀 나머지 데이터 행을 읽어 아래 표로 보여줍니다.
+        <b>표 내용을 확인한 뒤 "구글 시트에 기록"을 눌러야 실제로
+        기록됩니다.</b> 시트의 현재 마지막 데이터 행 바로 다음 줄부터
+        원본 컬럼 그대로 이어붙입니다.
+      </div>
+      <div class="log-toolbar">
+        <input type="text" id="book-invoice-search" class="roster-search-input" placeholder="이름/전화번호/주소/운송장번호 검색..." />
+        <span id="book-invoice-search-count" class="tutor-roster-count"></span>
+      </div>
+      <table class="dashboard-table" id="book-invoice-table">
+        <thead>
+          <tr>
+            <th>받는분</th>
+            <th>받는분전화번호</th>
+            <th>받는분주소</th>
+            <th>운송장번호</th>
+          </tr>
+        </thead>
+        <tbody id="book-invoice-table-body">
+          <tr><td colspan="4" class="empty">아직 업로드하지 않았습니다.</td></tr>
+        </tbody>
+      </table>
+      <div class="job-controls">
+        <button id="book-invoice-write-btn" class="btn btn-primary" disabled>구글 시트에 기록</button>
+      </div>
+      <div class="field-label">
+        구글 시트의 <a href="https://docs.google.com/spreadsheets/d/1brchNvWyrgqaogcGmEvz_7K50AA-otU6kwHmhwDLQwI/edit?gid=760310768#gid=760310768" target="_blank" rel="noopener">환불/카드취소 시트 - 교재 발송 탭</a>에
+        기록합니다. 이 시트에 서비스 계정 이메일이 '편집자'로 공유돼 있어야
+        기록이 됩니다.
+      </div>
+    </section>
+
+    <section class="panel">
       <div class="field-label login-test-label">실행 로그</div>
       <div class="log-toolbar">
         <input type="text" id="book-log-search" class="roster-search-input" placeholder="로그 검색... (일치하는 줄만 표시)" />
@@ -70,6 +111,13 @@ function renderBookShippingView(container) {
   const searchCount = container.querySelector('#book-search-count');
   const tableBody = container.querySelector('#book-table-body');
   const addressApiKeyInput = container.querySelector('#book-address-api-key');
+
+  const invoiceFileInput = container.querySelector('#book-invoice-file-input');
+  const invoiceParseBtn = container.querySelector('#book-invoice-parse-btn');
+  const invoiceWriteBtn = container.querySelector('#book-invoice-write-btn');
+  const invoiceSearchInput = container.querySelector('#book-invoice-search');
+  const invoiceSearchCount = container.querySelector('#book-invoice-search-count');
+  const invoiceTableBody = container.querySelector('#book-invoice-table-body');
 
   const logOutput = container.querySelector('#book-log-output');
   const logSearchInput = container.querySelector('#book-log-search');
@@ -215,7 +263,10 @@ function renderBookShippingView(container) {
     renderTable();
   });
 
-  // ---- 조회 시작 / 중단 ----
+  // ---- 조회 시작 / 중단 (여러 job이 같은 스트림을 공유하므로 currentJobId로
+  // 어떤 작업이 진행 중인지 구분한다) ----
+  let currentJobId = null;
+
   fetchBtn.addEventListener('click', async () => {
     orders = [];
     renderTable();
@@ -227,6 +278,7 @@ function renderBookShippingView(container) {
       return;
     }
 
+    currentJobId = 'book_fetch';
     fetchBtn.disabled = true;
     generateBtn.disabled = true;
     stopBtn.disabled = false;
@@ -244,6 +296,7 @@ function renderBookShippingView(container) {
       alert('이미 실행 중인 작업이 있습니다.');
       return;
     }
+    currentJobId = 'book_open_page';
     fetchBtn.disabled = true;
     generateBtn.disabled = true;
     stopBtn.disabled = false;
@@ -265,7 +318,106 @@ function renderBookShippingView(container) {
       return;
     }
 
+    currentJobId = 'book_generate';
     generateBtn.disabled = true;
+  });
+
+  // ---- 택배사 송장 엑셀 업로드 → 표로 확인 → 구글 시트에 기록 ----
+  let invoiceSelectedFilePath = null;
+  let invoiceRows = []; // { recipientName, recipientPhone, recipientAddress, invoiceNo, rawRow }
+  let invoiceSearchQuery = '';
+
+  invoiceFileInput.addEventListener('change', () => {
+    const file = invoiceFileInput.files && invoiceFileInput.files[0];
+    invoiceSelectedFilePath = file ? window.api.getPathForFile(file) : null;
+    invoiceParseBtn.disabled = !invoiceSelectedFilePath;
+  });
+
+  function updateInvoiceWriteButtonState() {
+    invoiceWriteBtn.disabled = invoiceRows.length === 0;
+  }
+
+  function renderInvoiceTable() {
+    const query = invoiceSearchQuery;
+    const filtered = invoiceRows.filter((r) => {
+      if (!query) return true;
+      return `${r.recipientName} ${r.recipientPhone} ${r.recipientAddress} ${r.invoiceNo}`
+        .toLowerCase()
+        .includes(query);
+    });
+
+    if (invoiceRows.length === 0) {
+      invoiceTableBody.innerHTML = '<tr><td colspan="4" class="empty">아직 업로드하지 않았습니다.</td></tr>';
+      invoiceSearchCount.textContent = '';
+      updateInvoiceWriteButtonState();
+      return;
+    }
+
+    if (filtered.length === 0) {
+      invoiceTableBody.innerHTML = '<tr><td colspan="4" class="empty">검색 결과가 없습니다.</td></tr>';
+    } else {
+      invoiceTableBody.innerHTML = filtered
+        .map(
+          (r) => `
+            <tr>
+              <td>${escapeHtml(r.recipientName) || '-'}</td>
+              <td>${escapeHtml(r.recipientPhone) || '-'}</td>
+              <td>${escapeHtml(r.recipientAddress) || '-'}</td>
+              <td>${escapeHtml(r.invoiceNo) || '-'}</td>
+            </tr>
+          `
+        )
+        .join('');
+    }
+
+    if (query) {
+      invoiceSearchCount.textContent = `${filtered.length} / ${invoiceRows.length}건 일치`;
+    } else {
+      invoiceSearchCount.textContent = `총 ${invoiceRows.length}건`;
+    }
+    updateInvoiceWriteButtonState();
+  }
+
+  invoiceSearchInput.addEventListener('input', () => {
+    invoiceSearchQuery = invoiceSearchInput.value.trim().toLowerCase();
+    renderInvoiceTable();
+  });
+
+  invoiceParseBtn.addEventListener('click', async () => {
+    if (!invoiceSelectedFilePath) return;
+    invoiceRows = [];
+    renderInvoiceTable();
+    logOutput.innerHTML = '';
+
+    const result = await window.api.startJob({ jobId: 'book_invoice_parse', filePath: invoiceSelectedFilePath });
+    if (!result.started) {
+      alert('이미 실행 중인 작업이 있습니다.');
+      return;
+    }
+
+    currentJobId = 'book_invoice_parse';
+    invoiceParseBtn.disabled = true;
+    invoiceWriteBtn.disabled = true;
+  });
+
+  invoiceWriteBtn.addEventListener('click', async () => {
+    if (invoiceRows.length === 0) {
+      alert('먼저 송장 파일을 읽어주세요.');
+      return;
+    }
+    if (!confirm(`표에 보이는 ${invoiceRows.length}건을 구글 시트에 기록할까요? 되돌리려면 시트에서 직접 지워야 합니다.`)) {
+      return;
+    }
+
+    const rows = invoiceRows.map((r) => r.rawRow);
+    const result = await window.api.startJob({ jobId: 'book_invoice_write', rows });
+    if (!result.started) {
+      alert('이미 실행 중인 작업이 있습니다.');
+      return;
+    }
+
+    currentJobId = 'book_invoice_write';
+    invoiceWriteBtn.disabled = true;
   });
 
   function attachListeners() {
@@ -277,16 +429,24 @@ function renderBookShippingView(container) {
       if (data.kind === 'book' && data.book) {
         orders.push(data.book);
         renderTable();
+        return;
+      }
+      if (data.kind === 'book_invoice' && data.bookInvoice) {
+        invoiceRows.push(data.bookInvoice);
+        renderInvoiceTable();
       }
     });
 
     window.api.onJobDone(async (data) => {
       if (typeof data.code === 'undefined') {
-        if (data.outputPaths) {
+        if (currentJobId === 'book_generate' && data.outputPaths) {
           for (const outputPath of data.outputPaths) {
             appendLog('info', `다운로드 폴더에 저장됨: ${outputPath}`);
             window.api.revealFile(outputPath).catch(() => {});
           }
+        }
+        if (currentJobId === 'book_invoice_write' && data.writtenCount) {
+          appendLog('info', `구글 시트 기록 완료: ${data.writtenCount}건`);
         }
         return;
       }
@@ -294,7 +454,10 @@ function renderBookShippingView(container) {
       appendLog('info', `작업 프로세스 종료 (종료 코드: ${data.code})`);
       fetchBtn.disabled = false;
       stopBtn.disabled = true;
+      invoiceParseBtn.disabled = !invoiceSelectedFilePath;
       updateGenerateButtonState();
+      updateInvoiceWriteButtonState();
+      currentJobId = null;
     });
   }
 
