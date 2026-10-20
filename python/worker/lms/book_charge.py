@@ -214,6 +214,32 @@ def fetch_pending_book_orders(driver) -> list[dict]:
     return orders
 
 
+def fetch_order_book_titles(driver, order_id: str) -> list[str]:
+    """주문 상세 화면(book_charge_detail.php)의 '상세주문내역' 표에서 실제
+    주문한 교재명 목록을 읽어온다 (조회만 한다 — 아무 것도 제출하지 않음).
+
+    사용자가 보여준 실제 HTML을 보면 교재명은 그 표의
+    <td class="text-left"><p class="strong mb-0">교재명</p></td>에 들어있다.
+    교재 한 건을 여러 권 주문하면("외 3 건") 행이 여러 개라 전부 모아
+    반환한다."""
+    driver.get(book_charge_detail_url(order_id))
+
+    try:
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "table.table-total"))
+        )
+    except TimeoutException as exc:
+        raise BookChargeError(f"상세주문내역을 불러오지 못했습니다 (주문번호 {order_id}).") from exc
+
+    soup = BeautifulSoup(driver.page_source, "html.parser")
+    table = soup.find("table", class_="table-total")
+    if table is None:
+        return []
+
+    titles = [p.get_text(strip=True) for p in table.select("td p.strong")]
+    return [t for t in titles if t]
+
+
 def set_order_shipped(driver, order_id: str, invoice_no: str) -> None:
     """주문 상세 화면(book_charge_detail.php)에서 배송상태를 '배송중'으로
     바꾸고 송장번호를 입력한 뒤 저장한다 — 사용자가 직접 확인해준 순서

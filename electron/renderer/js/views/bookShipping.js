@@ -26,7 +26,7 @@ function renderBookShippingView(container) {
         <a href="https://www.juso.go.kr" target="_blank" rel="noopener">juso.go.kr</a>에서 무료로 발급받아 입력해주세요.
       </div>
       <div class="log-toolbar">
-        <input type="text" id="book-search" class="roster-search-input" placeholder="이름/전화번호/주소 검색..." />
+        <input type="text" id="book-search" class="roster-search-input" placeholder="이름/전화번호/주소/교재명 검색..." />
         <span id="book-search-count" class="tutor-roster-count"></span>
       </div>
       <table class="dashboard-table" id="book-table">
@@ -35,19 +35,22 @@ function renderBookShippingView(container) {
             <th>받는분성명</th>
             <th>받는분전화번호</th>
             <th>받는분주소(전체, 분할)</th>
+            <th>주문 교재</th>
             <th>품목명</th>
             <th>주소 확인</th>
           </tr>
         </thead>
         <tbody id="book-table-body">
-          <tr><td colspan="5" class="empty">아직 조회하지 않았습니다.</td></tr>
+          <tr><td colspan="6" class="empty">아직 조회하지 않았습니다.</td></tr>
         </tbody>
       </table>
       <div class="job-controls">
         <button id="book-generate-btn" class="btn btn-primary" disabled>확인 완료 → 엑셀로 저장</button>
       </div>
       <div class="field-label">
-        '품목명'은 항상 '서적'으로 고정되어 저장됩니다. 저장되는 엑셀 파일은
+        '주문 교재'는 실제로 주문한 교재명을 확인용으로만 보여줍니다 — 엑셀
+        파일에는 들어가지 않습니다. '품목명'은 항상 '서적'으로 고정되어
+        저장됩니다. 저장되는 엑셀 파일은
         내 PC의 "다운로드" 폴더 아래 오늘 날짜 폴더에 바로 저장됩니다.
       </div>
     </section>
@@ -215,29 +218,37 @@ function renderBookShippingView(container) {
     const query = searchQuery;
     const filtered = orders.filter((o) => {
       if (!query) return true;
-      return `${o.recipientName} ${o.recipientPhone} ${o.recipientAddress}`.toLowerCase().includes(query);
+      const bookTitlesText = Array.isArray(o.bookTitles) ? o.bookTitles.join(' ') : '';
+      return `${o.recipientName} ${o.recipientPhone} ${o.recipientAddress} ${bookTitlesText}`
+        .toLowerCase()
+        .includes(query);
     });
 
     if (orders.length === 0) {
-      tableBody.innerHTML = '<tr><td colspan="5" class="empty">아직 조회하지 않았습니다.</td></tr>';
+      tableBody.innerHTML = '<tr><td colspan="6" class="empty">아직 조회하지 않았습니다.</td></tr>';
       searchCount.textContent = '';
       updateGenerateButtonState();
       return;
     }
 
     if (filtered.length === 0) {
-      tableBody.innerHTML = '<tr><td colspan="5" class="empty">검색 결과가 없습니다.</td></tr>';
+      tableBody.innerHTML = '<tr><td colspan="6" class="empty">검색 결과가 없습니다.</td></tr>';
     } else {
       tableBody.innerHTML = filtered
         .map((o, i) => {
           const needsReviewBadge = o.needsReview
             ? ` <span class="status-badge status-failed">확인 필요</span>`
             : '';
+          const bookTitles = Array.isArray(o.bookTitles) ? o.bookTitles : [];
+          const bookTitlesText = bookTitles.length
+            ? escapeHtml(bookTitles.join(', '))
+            : '<span class="status-badge status-failed">확인 필요</span>';
           return `
             <tr class="${o.needsReview ? 'row-failed' : ''}">
               <td>${escapeHtml(o.recipientName) || '-'}${needsReviewBadge}</td>
               <td>${escapeHtml(o.recipientPhone) || '-'}</td>
               <td>${escapeHtml(o.recipientAddress) || '-'}</td>
+              <td>${bookTitlesText}</td>
               <td>서적</td>
               <td>
                 <button type="button" class="btn btn-ghost book-check-address-btn" data-index="${i}" ${o.recipientAddress ? '' : 'disabled'}>주소 확인</button>
