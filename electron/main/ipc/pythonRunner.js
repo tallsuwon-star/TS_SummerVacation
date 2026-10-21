@@ -53,11 +53,25 @@ function buildWorkerEnv() {
 }
 
 let currentProcess = null;
+let currentJobId = null;
+
+// 여러 화면(view)이 각자 job:done 리스너를 하나씩만 유지하는 구조라, 다른
+// 화면에서 시작한 작업은 지금 보고 있는 화면에서 알 수가 없다 — "이미 실행
+// 중인 작업이 있습니다"만 뜨고 정작 그 작업을 끌 방법이 없는 문제. 이
+// 상태변화는 화면과 무관하게 항상 떠 있는 사이드바의 "실행 중인 작업"
+// 영역(electron/renderer/js/runningJob.js)이 구독하는 별도 채널로 보낸다.
+function broadcastStatus(mainWindow) {
+  mainWindow?.webContents.send('job:statusChanged', { running: Boolean(currentProcess), jobId: currentJobId });
+}
+
+function getStatus() {
+  return { running: Boolean(currentProcess), jobId: currentJobId };
+}
 
 function start(payload, mainWindow) {
   return new Promise((resolve) => {
     if (currentProcess) {
-      resolve({ started: false, reason: 'already-running' });
+      resolve({ started: false, reason: 'already-running', jobId: currentJobId });
       return;
     }
 
@@ -68,6 +82,8 @@ function start(payload, mainWindow) {
       env: buildWorkerEnv(),
     });
     currentProcess = child;
+    currentJobId = payload.jobId;
+    broadcastStatus(mainWindow);
 
     // spawn 자체가 실패하면(예: command를 찾을 수 없음) 'error' 이벤트가 발생한다.
     // 리스너가 없으면 Node가 처리되지 않은 예외로 던져서 Electron 프로세스 전체가 죽으므로 반드시 처리해야 한다.
@@ -78,7 +94,11 @@ function start(payload, mainWindow) {
         message: `작업 프로세스를 실행할 수 없습니다 ("${command}" 명령을 찾을 수 없거나 실행 권한이 없습니다): ${err.message}`,
       });
       mainWindow?.webContents.send('job:done', { type: 'done', code: -1 });
-      if (currentProcess === child) currentProcess = null;
+      if (currentProcess === child) {
+        currentProcess = null;
+        currentJobId = null;
+        broadcastStatus(mainWindow);
+      }
     });
 
     // 첫 줄로 작업 설정(JSON)을 전달, 이후 stdin은 pause/resume/stop 제어용
@@ -109,7 +129,11 @@ function start(payload, mainWindow) {
 
     child.on('close', (code) => {
       mainWindow?.webContents.send('job:done', { type: 'done', code });
-      if (currentProcess === child) currentProcess = null;
+      if (currentProcess === child) {
+        currentProcess = null;
+        currentJobId = null;
+        broadcastStatus(mainWindow);
+      }
     });
 
     resolve({ started: true });
@@ -140,7 +164,8 @@ function killCurrent() {
   if (currentProcess) {
     currentProcess.kill();
     currentProcess = null;
+    currentJobId = null;
   }
 }
 
-module.exports = { start, pause, resume, stop, killCurrent };
+module.exports = { start, pause, resume, stop, killCurrent, getStatus };

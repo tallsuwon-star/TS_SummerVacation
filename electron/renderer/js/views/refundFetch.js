@@ -343,7 +343,7 @@ function buildRefundPanel(container) {
 
     const result = await window.api.startJob({ jobId: 'refund_open_consult', targets });
     if (!result.started) {
-      alert('이미 실행 중인 작업이 있습니다.');
+      alert('이미 실행 중인 작업이 있습니다. 사이드바 하단 \'실행 중인 작업\'에서 종료할 수 있습니다.');
       return;
     }
 
@@ -418,7 +418,7 @@ function buildRefundPanel(container) {
 
     const result = await window.api.startJob({ jobId: 'refund_fetch' });
     if (!result.started) {
-      alert('이미 실행 중인 작업이 있습니다.');
+      alert('이미 실행 중인 작업이 있습니다. 사이드바 하단 \'실행 중인 작업\'에서 종료할 수 있습니다.');
       return;
     }
 
@@ -440,7 +440,7 @@ function buildRefundPanel(container) {
 
     const result = await window.api.startJob({ jobId: 'refund_generate', refunds, preparerName });
     if (!result.started) {
-      alert('이미 실행 중인 작업이 있습니다.');
+      alert('이미 실행 중인 작업이 있습니다. 사이드바 하단 \'실행 중인 작업\'에서 종료할 수 있습니다.');
       return;
     }
 
@@ -793,7 +793,7 @@ function buildCardCancelPanel(container) {
 
     const result = await window.api.startJob({ jobId: 'card_cancel_fetch' });
     if (!result.started) {
-      alert('이미 실행 중인 작업이 있습니다.');
+      alert('이미 실행 중인 작업이 있습니다. 사이드바 하단 \'실행 중인 작업\'에서 종료할 수 있습니다.');
       return;
     }
 
@@ -807,7 +807,7 @@ function buildCardCancelPanel(container) {
 
     const result = await window.api.startJob({ jobId: 'card_cancel_open_consult', targets });
     if (!result.started) {
-      alert('이미 실행 중인 작업이 있습니다.');
+      alert('이미 실행 중인 작업이 있습니다. 사이드바 하단 \'실행 중인 작업\'에서 종료할 수 있습니다.');
       return;
     }
     fetchBtn.disabled = true;
@@ -935,7 +935,7 @@ function buildExpenseWritePanel(container) {
 
     const result = await window.api.startJob({ jobId: 'expense_write', filePath: selectedFilePath });
     if (!result.started) {
-      alert('이미 실행 중인 작업이 있습니다.');
+      alert('이미 실행 중인 작업이 있습니다. 사이드바 하단 \'실행 중인 작업\'에서 종료할 수 있습니다.');
       return;
     }
 

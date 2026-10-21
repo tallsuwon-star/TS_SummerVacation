@@ -311,7 +311,7 @@ function renderBookShippingView(container) {
 
     const result = await window.api.startJob({ jobId: 'book_fetch' });
     if (!result.started) {
-      alert('이미 실행 중인 작업이 있습니다.');
+      alert('이미 실행 중인 작업이 있습니다. 사이드바 하단 \'실행 중인 작업\'에서 종료할 수 있습니다.');
       return;
     }
 
@@ -330,7 +330,7 @@ function renderBookShippingView(container) {
   openLmsBtn.addEventListener('click', async () => {
     const result = await window.api.startJob({ jobId: 'book_open_page' });
     if (!result.started) {
-      alert('이미 실행 중인 작업이 있습니다.');
+      alert('이미 실행 중인 작업이 있습니다. 사이드바 하단 \'실행 중인 작업\'에서 종료할 수 있습니다.');
       return;
     }
     currentJobId = 'book_open_page';
@@ -351,7 +351,7 @@ function renderBookShippingView(container) {
 
     const result = await window.api.startJob({ jobId: 'book_generate', orders });
     if (!result.started) {
-      alert('이미 실행 중인 작업이 있습니다.');
+      alert('이미 실행 중인 작업이 있습니다. 사이드바 하단 \'실행 중인 작업\'에서 종료할 수 있습니다.');
       return;
     }
 
@@ -429,7 +429,7 @@ function renderBookShippingView(container) {
 
     const result = await window.api.startJob({ jobId: 'book_invoice_parse', filePath: invoiceSelectedFilePath });
     if (!result.started) {
-      alert('이미 실행 중인 작업이 있습니다.');
+      alert('이미 실행 중인 작업이 있습니다. 사이드바 하단 \'실행 중인 작업\'에서 종료할 수 있습니다.');
       return;
     }
 
@@ -450,7 +450,7 @@ function renderBookShippingView(container) {
     const rows = invoiceRows.map((r) => r.rawRow);
     const result = await window.api.startJob({ jobId: 'book_invoice_write', rows });
     if (!result.started) {
-      alert('이미 실행 중인 작업이 있습니다.');
+      alert('이미 실행 중인 작업이 있습니다. 사이드바 하단 \'실행 중인 작업\'에서 종료할 수 있습니다.');
       return;
     }
 
@@ -504,7 +504,7 @@ function renderBookShippingView(container) {
 
     const result = await window.api.startJob({ jobId: 'book_mark_shipped', invoiceRows });
     if (!result.started) {
-      alert('이미 실행 중인 작업이 있습니다.');
+      alert('이미 실행 중인 작업이 있습니다. 사이드바 하단 \'실행 중인 작업\'에서 종료할 수 있습니다.');
       return;
     }
 

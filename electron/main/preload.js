@@ -21,6 +21,15 @@ contextBridge.exposeInMainWorld('api', {
   pauseJob: () => ipcRenderer.invoke('job:pause'),
   resumeJob: () => ipcRenderer.invoke('job:resume'),
   stopJob: () => ipcRenderer.invoke('job:stop'),
+
+  // 현재 실행 중인 작업 상태 (화면 전환과 무관하게 항상 떠 있는 사이드바의
+  // "실행 중인 작업" 영역이 쓴다 — 다른 화면에서 시작한 작업도 여기서 바로
+  // 끌 수 있어야 하므로, 뷰별 job:log/record/done 리스너와는 별도 채널이다).
+  getJobStatus: () => ipcRenderer.invoke('job:status'),
+  onJobStatusChanged: (callback) => {
+    ipcRenderer.removeAllListeners('job:statusChanged');
+    ipcRenderer.on('job:statusChanged', (_event, data) => callback(data));
+  },
   onJobProgress: (callback) => {
     ipcRenderer.removeAllListeners('job:progress');
     ipcRenderer.on('job:progress', (_event, data) => callback(data));

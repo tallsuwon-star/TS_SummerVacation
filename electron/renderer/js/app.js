@@ -77,6 +77,7 @@ async function bootstrap() {
 
   await initTheme();
   initLmsSettingsModal();
+  window.initRunningJobStatus();
   window.sidebar.renderJobNav();
   await window.sidebar.renderInstallNav();
   window.sidebar.wireInstallModal();

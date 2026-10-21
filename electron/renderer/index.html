@@ -27,6 +27,12 @@
         <div class="nav-title">설치가 필요한 목록</div>
         <ul id="install-nav-list" class="nav-list"></ul>
       </nav>
+
+      <nav class="nav-section" id="running-job-section">
+        <div class="nav-title">실행 중인 작업</div>
+        <div id="running-job-status" class="running-job-status">실행 중인 작업이 없습니다.</div>
+        <button id="running-job-stop-btn" class="btn btn-danger" disabled>작업 종료</button>
+      </nav>
     </aside>
 
     <main class="main-content" id="main-content"></main>
@@ -68,6 +74,7 @@
   </div>
 
   <script src="js/sidebar.js"></script>
+  <script src="js/runningJob.js"></script>
   <script src="js/dashboard.js"></script>
   <script src="js/views/morningSpecialStats.js"></script>
   <script src="js/views/overdueReport.js"></script>

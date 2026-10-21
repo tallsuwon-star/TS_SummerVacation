@@ -128,7 +128,7 @@ function renderVocakingReportView(container) {
 
     const result = await window.api.startJob({ jobId: 'vocaking_report' });
     if (!result.started) {
-      alert('이미 실행 중인 작업이 있습니다.');
+      alert('이미 실행 중인 작업이 있습니다. 사이드바 하단 \'실행 중인 작업\'에서 종료할 수 있습니다.');
       return;
     }
 

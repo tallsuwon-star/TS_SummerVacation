@@ -26,6 +26,7 @@ function registerIpcHandlers(mainWindow) {
   ipcMain.handle('job:pause', () => pythonRunner.pause());
   ipcMain.handle('job:resume', () => pythonRunner.resume());
   ipcMain.handle('job:stop', () => pythonRunner.stop());
+  ipcMain.handle('job:status', () => pythonRunner.getStatus());
 
   ipcMain.handle('clipboard:copy', (_event, text) => clipboard.copy(text));
 
