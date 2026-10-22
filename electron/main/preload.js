@@ -71,4 +71,9 @@ contextBridge.exposeInMainWorld('api', {
 
   // 교재 관리: 도로명주소(juso.go.kr) API로 실제 존재하는 주소인지 확인.
   checkRoadAddress: (address, apiKey) => ipcRenderer.invoke('address:checkRoad', { address, apiKey }),
+
+  // 이성규의 아이디어 창고: 레포의 ideas/ 폴더에 마크다운 파일로 저장.
+  listIdeas: () => ipcRenderer.invoke('ideas:list'),
+  createIdea: (payload) => ipcRenderer.invoke('ideas:create', payload),
+  deleteIdea: (id) => ipcRenderer.invoke('ideas:delete', id),
 });

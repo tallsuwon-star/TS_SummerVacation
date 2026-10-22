@@ -8,6 +8,7 @@ const ALL_JOBS = [
   { id: 'work_report', label: '업무보고' },
   { id: 'refund_fetch', label: '환불/카드취소' },
   { id: 'book_fetch', label: '교재 관리' },
+  { id: 'idea_warehouse', label: '이성규의 아이디어 창고' },
 ];
 
 const INSTALL_CHECKS = [{ id: 'selenium', label: 'Selenium' }];

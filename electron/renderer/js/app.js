@@ -7,6 +7,7 @@ const VIEW_RENDERERS = {
   work_report: (container) => window.renderWorkReportView(container),
   refund_fetch: (container) => window.renderRefundFetchView(container),
   book_fetch: (container) => window.renderBookShippingView(container),
+  idea_warehouse: (container) => window.renderIdeaWarehouseView(container),
 };
 
 function renderView(jobId) {

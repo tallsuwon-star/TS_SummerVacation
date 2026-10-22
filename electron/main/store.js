@@ -36,6 +36,8 @@ const store = new Store({
     // 교재 관리 화면의 "주소 확인" 버튼이 쓰는 도로명주소(juso.go.kr) 오픈
     // API 승인키. https://www.juso.go.kr 에서 직접 발급받아 입력해야 한다.
     roadAddressApiKey: '',
+    // 아이디어 창고: 카테고리에 아이디어가 이 개수 미만이면 "아이디어 필요"로 표시.
+    ideaWarehouseThreshold: 3,
   },
 });
 

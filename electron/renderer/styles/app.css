@@ -167,6 +167,31 @@ html, body {
   box-shadow: var(--shadow);
 }
 
+.idea-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+
+.idea-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.idea-card-header .field-label {
+  margin-left: auto;
+  font-weight: 400;
+}
+
+.idea-card-body {
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
 .criteria-panel {
   display: flex;
   gap: 24px;
