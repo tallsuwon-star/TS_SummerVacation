@@ -38,6 +38,11 @@ const store = new Store({
     roadAddressApiKey: '',
     // 아이디어 창고: 카테고리에 아이디어가 이 개수 미만이면 "아이디어 필요"로 표시.
     ideaWarehouseThreshold: 3,
+    // 메인 화면 상단 배너에 보여주는 "오늘 할 일" 목록. 매일 같은 시각에 반복된다
+    // (date가 아니라 time만 저장) — lastFiredDate/lastCompletedDate로 그날 하루에
+    // 대해서만 "이미 띄웠음"/"완료함" 상태를 추적하고, 날짜가 바뀌면 자동으로 초기화된다.
+    // [{ id, title, time: "HH:MM", lastFiredDate: "YYYY-MM-DD"|null, lastCompletedDate: "YYYY-MM-DD"|null }]
+    todayTasks: [],
   },
 });
 
