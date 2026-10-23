@@ -38,10 +38,13 @@ const store = new Store({
     roadAddressApiKey: '',
     // 아이디어 창고: 카테고리에 아이디어가 이 개수 미만이면 "아이디어 필요"로 표시.
     ideaWarehouseThreshold: 3,
-    // 메인 화면 상단 배너에 보여주는 "오늘 할 일" 목록. 매일 같은 시각에 반복된다
-    // (date가 아니라 time만 저장) — lastFiredDate/lastCompletedDate로 그날 하루에
-    // 대해서만 "이미 띄웠음"/"완료함" 상태를 추적하고, 날짜가 바뀌면 자동으로 초기화된다.
-    // [{ id, title, time: "HH:MM", lastFiredDate: "YYYY-MM-DD"|null, lastCompletedDate: "YYYY-MM-DD"|null }]
+    // 메인 화면 오른쪽 "오늘 할 일" 패널에 보여주는 목록. mode별로 알림 방식이 다르다:
+    //   - 'daily': 매일 time(HH:MM)에 한 번씩. lastFiredDate/lastCompletedDate로
+    //     그날 "이미 울림"/"완료함"을 추적(날짜 바뀌면 자동 초기화).
+    //   - 'interval': 시간 미정, intervalMinutes(기본 30)분마다 반복. lastFiredAt은
+    //     마지막으로 울린 시각(ISO). fixTaskTime으로 time을 정해주면 'daily'로 전환.
+    //   - 'todo': 알림 없이 목록에만 표시.
+    // [{ id, title, mode, time, intervalMinutes, lastFiredDate, lastFiredAt, lastCompletedDate }]
     todayTasks: [],
   },
 });

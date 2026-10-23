@@ -79,7 +79,7 @@ async function bootstrap() {
   await initTheme();
   initLmsSettingsModal();
   window.initRunningJobStatus();
-  window.initTodayBanner();
+  window.initTodayPanel();
   window.sidebar.renderJobNav();
   await window.sidebar.renderInstallNav();
   window.sidebar.wireInstallModal();

@@ -10,6 +10,7 @@ const anthropicClient = require('./anthropic');
 const fileSave = require('./fileSave');
 const roadAddress = require('./roadAddress');
 const ideas = require('./ideas');
+const taskScheduler = require('./taskScheduler');
 
 function registerIpcHandlers(mainWindow) {
   ipcMain.handle('settings:get', () => store.store);
@@ -43,6 +44,11 @@ function registerIpcHandlers(mainWindow) {
   ipcMain.handle('ideas:list', () => ideas.listIdeas());
   ipcMain.handle('ideas:create', (_event, payload) => ideas.createIdea(payload));
   ipcMain.handle('ideas:delete', (_event, id) => ideas.deleteIdea(id));
+
+  // "오늘 할 일" 알림을 실제 시각/주기를 기다리지 않고 바로 테스트해보는 용도.
+  ipcMain.handle('tasks:testPopup', (_event, title) => {
+    taskScheduler.openNaverPopup(title);
+  });
 }
 
 module.exports = registerIpcHandlers;
