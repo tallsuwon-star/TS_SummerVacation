@@ -46,8 +46,8 @@ function registerIpcHandlers(mainWindow) {
   ipcMain.handle('ideas:delete', (_event, id) => ideas.deleteIdea(id));
 
   // "오늘 할 일" 알림을 실제 시각/주기를 기다리지 않고 바로 테스트해보는 용도.
-  ipcMain.handle('tasks:testPopup', (_event, title) => {
-    taskScheduler.openNaverPopup(title);
+  ipcMain.handle('tasks:testPopup', (_event, taskId) => {
+    taskScheduler.testPopup(taskId);
   });
 }
 

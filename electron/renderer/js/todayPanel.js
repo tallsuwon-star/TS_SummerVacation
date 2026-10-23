@@ -140,7 +140,7 @@ function initTodayPanel() {
         <input type="checkbox" class="today-task-complete-cb" data-id="${escapeHtml(task.id)}" ${completed ? 'checked' : ''} title="오늘 완료" />
         <span class="today-task-time">${escapeHtml(timeLabel)}</span>
         <span class="today-task-title" title="${escapeHtml(task.title)}">${escapeHtml(task.title)}</span>
-        <button type="button" class="btn btn-ghost today-task-test-btn" data-id="${escapeHtml(task.id)}" title="지금 바로 새 창으로 테스트">▶</button>
+        <button type="button" class="btn btn-ghost today-task-test-btn" data-id="${escapeHtml(task.id)}" title="지금 바로 알림 테스트 (시작/미루기 팝업)">▶</button>
         <button type="button" class="btn btn-ghost today-task-delete-btn" data-id="${escapeHtml(task.id)}" title="삭제">✕</button>
       </div>
       ${fixRow}
@@ -189,10 +189,8 @@ function initTodayPanel() {
     });
 
     sectionsEl.querySelectorAll('.today-task-test-btn').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        const allTasks = await getTasks();
-        const task = allTasks.find((t) => t.id === btn.dataset.id);
-        if (task) window.api.testTaskPopup(task.title);
+      btn.addEventListener('click', () => {
+        window.api.testTaskPopup(btn.dataset.id);
       });
     });
 

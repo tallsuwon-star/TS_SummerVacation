@@ -77,6 +77,7 @@ contextBridge.exposeInMainWorld('api', {
   createIdea: (payload) => ipcRenderer.invoke('ideas:create', payload),
   deleteIdea: (id) => ipcRenderer.invoke('ideas:delete', id),
 
-  // 오늘 할 일 알림을 실제 시각/주기를 기다리지 않고 새 창 팝업으로 바로 테스트.
-  testTaskPopup: (title) => ipcRenderer.invoke('tasks:testPopup', title),
+  // 오늘 할 일 알림을 실제 시각/주기를 기다리지 않고 "지금 시작/20분 후 다시"
+  // 결정 팝업으로 바로 테스트.
+  testTaskPopup: (taskId) => ipcRenderer.invoke('tasks:testPopup', taskId),
 });
