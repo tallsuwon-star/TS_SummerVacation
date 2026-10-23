@@ -5,21 +5,27 @@
 //     패널에서 시각을 정해주면 daily로 바뀌어 그때부터는 그 시각에만 울린다.
 //   - todo(알림 없음): 그냥 나중에 보려고 적어두는 목록. 울리지 않는다.
 //
-// 알림이 뜰 때는 바로 네이버 검색창을 띄우지 않고, 먼저 "지금 시작" /
-// "20분 후 다시"를 고르는 작은 결정 팝업을 띄운다. "지금 시작"을 누르면
-// 그제서야 네이버에서 "성규야 {업무명} 시작해라"를 검색한 새 창이 뜨고,
-// "20분 후 다시"를 누르면 그 순간부터 SNOOZE_MINUTES분 뒤 같은 결정
-// 팝업이 다시 뜬다(원래 daily/interval 주기와 무관하게 한 번 더).
+// 알림이 뜰 때는 바로 네이버 검색창을 띄우지 않고, 먼저 화면 우측 하단에
+// 작은 토스트 알림처럼(틀 없는 작은 창, 항상 위) "지금 시작" / "20분 후
+// 다시"를 고르는 결정 팝업을 띄운다. "지금 시작"을 누르면 그제서야
+// 네이버에서 "성규야 {업무명} 시작해라"를 검색한 새 창이 뜨고, "20분 후
+// 다시"를 누르면 그 순간부터 SNOOZE_MINUTES분 뒤 같은 토스트가 다시
+// 뜬다(원래 daily/interval 주기와 무관하게 한 번 더).
 //
 // 모든 팝업은 기존에 열려있는 브라우저/창을 재사용하지 않고 항상 새
 // BrowserWindow로 띄운다 — 사용자가 명시적으로 요청한 "기존에 있던 창 말고".
 
-const { BrowserWindow, ipcMain } = require('electron');
+const { BrowserWindow, ipcMain, screen } = require('electron');
 const store = require('../store');
 
 const CHECK_INTERVAL_MS = 20000; // 분 경계를 놓치지 않을 정도로 촘촘하게 확인
 const DEFAULT_INTERVAL_MINUTES = 30;
 const SNOOZE_MINUTES = 20;
+
+// 결정 팝업(토스트) 크기/화면 우측 하단 여백.
+const TOAST_WIDTH = 340;
+const TOAST_HEIGHT = 170;
+const TOAST_MARGIN = 20;
 
 function pad2(n) {
   return String(n).padStart(2, '0');
@@ -59,34 +65,87 @@ function openNaverPopup(title) {
   return popup;
 }
 
-// "지금 시작" / "20분 후 다시"를 고르는 결정 팝업. 이 창은 외부 URL을 전혀
-// 불러오지 않고 우리가 직접 만든 로컬 HTML만 보여주므로, nodeIntegration을
-// 켜서 ipcRenderer로 바로 메인 프로세스에 선택 결과를 보낸다.
+// 동시에 여러 알림이 뜰 때 토스트끼리 겹치지 않도록, 지금 떠 있는 토스트
+// 개수만큼 위로 쌓아 올린다. 창이 닫히면(결정 또는 사용자가 직접 닫음) 자리에서 뺀다.
+const openToasts = [];
+
+function toastPosition(index) {
+  const display = screen.getPrimaryDisplay();
+  const { x: areaX, y: areaY, width, height } = display.workArea;
+  const x = areaX + width - TOAST_WIDTH - TOAST_MARGIN;
+  const y = areaY + height - TOAST_HEIGHT - TOAST_MARGIN - index * (TOAST_HEIGHT + 12);
+  return { x, y };
+}
+
+// "지금 시작" / "20분 후 다시"를 고르는 결정 팝업. 일반 창이 아니라 화면
+// 우측 하단에 뜨는 작은 토스트 알림처럼 보이도록 틀 없이(frameless) 그
+// 자리에 띄운다. 외부 URL을 전혀 불러오지 않고 우리가 직접 만든 로컬
+// HTML만 보여주므로, nodeIntegration을 켜서 ipcRenderer로 바로 메인
+// 프로세스에 선택 결과를 보낸다.
 function openDecisionPopup(task) {
+  const { x, y } = toastPosition(openToasts.length);
+
   const popup = new BrowserWindow({
-    width: 420,
-    height: 220,
-    title: `성규야 ${task.title} 시작해라`,
+    width: TOAST_WIDTH,
+    height: TOAST_HEIGHT,
+    x,
+    y,
+    frame: false,
     resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    title: `성규야 ${task.title} 시작해라`,
     webPreferences: { nodeIntegration: true, contextIsolation: false },
+  });
+
+  openToasts.push(popup);
+  popup.on('closed', () => {
+    const idx = openToasts.indexOf(popup);
+    if (idx !== -1) openToasts.splice(idx, 1);
+
+    // "지금 시작"/"20분 후 다시"를 누르지 않고 ✕로 그냥 닫은 경우, pendingDecision이
+    // 그대로 남아 다시는 안 울리게 되는 걸 막기 위해 미루기로 처리한다.
+    const tasks = store.get('todayTasks') || [];
+    const current = tasks.find((t) => t.id === task.id);
+    if (current && current.pendingDecision) {
+      handleDecision(task.id, 'snooze');
+    }
   });
 
   const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8" />
 <style>
-  body { font-family: -apple-system, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; text-align: center; padding-top: 22px; margin: 0; }
-  h2 { margin: 0 12px 8px; font-size: 18px; }
-  p { color: #777; margin: 0 0 22px; font-size: 13px; }
-  button { font-size: 14px; padding: 10px 18px; margin: 0 6px; border: none; border-radius: 6px; cursor: pointer; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    position: relative;
+    font-family: -apple-system, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 18px 20px;
+    background: #1f2430;
+    color: #fff;
+    border: 1px solid #39405a;
+    border-radius: 10px;
+  }
+  h2 { margin: 0 0 6px; font-size: 15px; }
+  p { color: #aab0c6; margin: 0 0 16px; font-size: 12px; }
+  .btn-row { display: flex; gap: 8px; }
+  button { flex: 1; font-size: 13px; padding: 9px 0; border: none; border-radius: 6px; cursor: pointer; }
   .start { background: #2d6cdf; color: #fff; }
-  .snooze { background: #eee; color: #333; }
+  .snooze { background: #39405a; color: #e4e6f0; }
+  #close-btn { position: absolute; top: 8px; right: 10px; background: none; color: #888; font-size: 14px; padding: 0; flex: none; }
 </style>
 </head>
 <body>
+  <button id="close-btn" title="닫기">✕</button>
   <h2>성규야 ${escapeHtml(task.title)} 시작해라</h2>
   <p>지금 시작할까요, ${SNOOZE_MINUTES}분 뒤에 다시 알려드릴까요?</p>
-  <button id="start-btn" class="start">지금 시작</button>
-  <button id="snooze-btn" class="snooze">${SNOOZE_MINUTES}분 후 다시</button>
+  <div class="btn-row">
+    <button id="start-btn" class="start">지금 시작</button>
+    <button id="snooze-btn" class="snooze">${SNOOZE_MINUTES}분 후 다시</button>
+  </div>
   <script>
     const { ipcRenderer } = require('electron');
     const taskId = ${JSON.stringify(task.id)};
@@ -98,6 +157,7 @@ function openDecisionPopup(task) {
       ipcRenderer.send('task-decision', { taskId, action: 'snooze' });
       window.close();
     });
+    document.getElementById('close-btn').addEventListener('click', () => window.close());
   </script>
 </body></html>`;
 
