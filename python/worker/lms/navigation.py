@@ -1,12 +1,13 @@
 import time
 
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
 from .. import config
 from ..utils.progress import emit_log
+from .auth import EMAIL_INPUT_SELECTOR, LOGIN_BUTTON_XPATH, PASSWORD_INPUT_SELECTOR
 from .driver import switch_to_new_window
 
 # 실제 확인된 선택자:
@@ -152,6 +153,49 @@ def _dismiss_insecure_form_warning(driver, timeout: float = 8) -> bool:
     return True
 
 
+def _login_if_prompted(driver, timeout: float = 5) -> bool:
+    """'무시하고 보내기'를 누른 뒤 통합LMS 쪽에서 로그인 화면이 다시 뜨는
+    경우가 있어(사용자 확인), .env의 LMS_ID/LMS_PASSWORD로 다시 로그인한다.
+    메인 LMS 로그인 폼(auth.py)과 같은 선택자를 그대로 쓴다 — 같은 시스템의
+    로그인 화면으로 보이기 때문이다. 만약 통합LMS 쪽 로그인 폼의 실제
+    선택자가 다르다면 이 함수가 그냥 아무 것도 못 찾고 지나가므로, 로그인이
+    또 막히면 그 화면의 실제 HTML을 확인해서 선택자를 고쳐야 한다.
+
+    로그인 화면이 안 뜨면(이미 로그인된 세션 등) 아무 것도 안 하고 False를
+    반환한다 — 오류로 보지 않는다."""
+    try:
+        email_input = WebDriverWait(driver, timeout).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, EMAIL_INPUT_SELECTOR))
+        )
+    except TimeoutException:
+        return False
+
+    emit_log("통합LMS 쪽에서 로그인 화면이 다시 떠서 .env 정보로 재로그인합니다.")
+
+    try:
+        password_input = driver.find_element(By.CSS_SELECTOR, PASSWORD_INPUT_SELECTOR)
+    except NoSuchElementException:
+        emit_log("통합LMS 로그인 화면에서 비밀번호 입력칸을 찾지 못했습니다. 직접 확인해주세요.", level="error")
+        return True
+
+    email_input.clear()
+    email_input.send_keys(config.LMS_ID)
+    password_input.clear()
+    password_input.send_keys(config.LMS_PASSWORD)
+
+    time.sleep(config.REQUEST_DELAY_SECONDS)
+
+    try:
+        login_button = driver.find_element(By.XPATH, LOGIN_BUTTON_XPATH)
+    except NoSuchElementException:
+        emit_log("통합LMS 로그인 화면에서 로그인 버튼을 찾지 못했습니다. 직접 확인해주세요.", level="error")
+        return True
+
+    driver.execute_script("arguments[0].click();", login_button)
+    time.sleep(config.REQUEST_DELAY_SECONDS)
+    return True
+
+
 def go_to_integrated_lms(driver) -> None:
     """상단 정보바의 '통합LMS' 링크로 이동 (SSO 새 창 로그인).
 
@@ -183,13 +227,16 @@ def go_to_integrated_lms(driver) -> None:
     emit_log(f"'{INTEGRATED_LMS_LINK_TEXT}' 새 창으로 전환 완료, 로그인 리다이렉트 대기 중")
 
     _dismiss_insecure_form_warning(driver)
+    _login_if_prompted(driver)
 
     # SSO 리다이렉트 체인(폼 제출 -> login_check.php -> 최종 목적지)이 끝날 시간을 준다.
     time.sleep(config.REQUEST_DELAY_SECONDS * 2)
 
-    # 리다이렉트 체인 중간(처음 확인했을 때는 아직 안 뜬 상태)에 경고가 뜰 수도
-    # 있어 한 번 더 짧게 확인한다. 이미 통과했으면 바로 False로 빠진다.
+    # 리다이렉트 체인 중간(처음 확인했을 때는 아직 안 뜬 상태)에 경고/로그인
+    # 화면이 뜰 수도 있어 한 번 더 짧게 확인한다. 이미 통과했으면 바로
+    # False로 빠진다.
     _dismiss_insecure_form_warning(driver, timeout=3)
+    _login_if_prompted(driver, timeout=3)
 
     emit_log(f"현재 URL: {driver.current_url}")
     emit_log(f"페이지 제목: {driver.title}")
