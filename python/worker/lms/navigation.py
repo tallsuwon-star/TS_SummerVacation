@@ -26,6 +26,12 @@ DAILY_SETTLEMENT_BUTTON_TEXT = "일일정산달력"
 # 클릭 후 새로 열리는 창으로 전환하고 리다이렉트 체인이 끝날 때까지 기다려야 한다.
 INTEGRATED_LMS_LINK_TEXT = "통합LMS"
 
+# 이 SSO 폼이 안전하지 않은(HTTP) 연결로 제출돼, 크롬이 "안전하지 않은 정보를
+# 제출하려 함" 경고 화면(사용자가 실제로 확인해준 화면)을 끼워 넣는 경우가 있다.
+# 그 화면의 "무시하고 보내기" 버튼 id. 경고가 안 뜨면(이미 신뢰된 세션 등)
+# 그냥 지나간다 — 항상 뜨는 건 아니라서 오류로 보지 않는다.
+INSECURE_FORM_PROCEED_BUTTON_ID = "proceed-button"
+
 
 class NavigationError(Exception):
     pass
@@ -121,6 +127,24 @@ def go_to_daily_settlement_calendar(driver) -> None:
         emit_log("일일정산달력 페이지로 이동 완료 (같은 탭)")
 
 
+def _dismiss_insecure_form_warning(driver, timeout: float = 5) -> bool:
+    """SSO 폼이 안전하지 않은 연결로 제출될 때 크롬이 끼워 넣는 "안전하지
+    않은 정보를 제출하려 함" 경고 화면에서 "무시하고 보내기"를 눌러
+    통과시킨다. 경고가 안 뜨면(항상 뜨는 건 아님) 아무 것도 안 하고
+    False를 반환한다 — 오류로 보지 않는다."""
+    try:
+        proceed_button = WebDriverWait(driver, timeout).until(
+            EC.element_to_be_clickable((By.ID, INSECURE_FORM_PROCEED_BUTTON_ID))
+        )
+    except TimeoutException:
+        return False
+
+    emit_log("크롬의 '안전하지 않은 정보를 제출하려 함' 경고 감지 - '무시하고 보내기' 클릭")
+    proceed_button.click()
+    time.sleep(config.REQUEST_DELAY_SECONDS)
+    return True
+
+
 def go_to_integrated_lms(driver) -> None:
     """상단 정보바의 '통합LMS' 링크로 이동 (SSO 새 창 로그인).
 
@@ -150,6 +174,9 @@ def go_to_integrated_lms(driver) -> None:
         raise NavigationError(f"'{INTEGRATED_LMS_LINK_TEXT}' 새 창이 열리지 않았습니다.") from exc
 
     emit_log(f"'{INTEGRATED_LMS_LINK_TEXT}' 새 창으로 전환 완료, 로그인 리다이렉트 대기 중")
+
+    _dismiss_insecure_form_warning(driver)
+
     # SSO 리다이렉트 체인(폼 제출 -> login_check.php -> 최종 목적지)이 끝날 시간을 준다.
     time.sleep(config.REQUEST_DELAY_SECONDS * 2)
     emit_log(f"현재 URL: {driver.current_url}")
