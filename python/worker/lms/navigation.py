@@ -127,20 +127,27 @@ def go_to_daily_settlement_calendar(driver) -> None:
         emit_log("일일정산달력 페이지로 이동 완료 (같은 탭)")
 
 
-def _dismiss_insecure_form_warning(driver, timeout: float = 5) -> bool:
+def _dismiss_insecure_form_warning(driver, timeout: float = 8) -> bool:
     """SSO 폼이 안전하지 않은 연결로 제출될 때 크롬이 끼워 넣는 "안전하지
-    않은 정보를 제출하려 함" 경고 화면에서 "무시하고 보내기"를 눌러
-    통과시킨다. 경고가 안 뜨면(항상 뜨는 건 아님) 아무 것도 안 하고
-    False를 반환한다 — 오류로 보지 않는다."""
+    않은 정보를 제출하려 함" 경고 화면(사용자가 실제 HTML로 확인해준
+    <button id="proceed-button">무시하고 보내기</button>)에서 그 버튼을
+    찾아 눌러 통과시킨다.
+
+    이런 크롬 자체 경고/인터스티셜 화면은 일반 clickable 판정(크기/투명도
+    등)이 평소 페이지와 다르게 나와 EC.element_to_be_clickable이 계속
+    타임아웃나는 경우가 있어, 존재만 확인되면(presence) 바로 JS로 클릭한다
+    (이 코드베이스의 다른 "숨겨진 사본 때문에 click()이 실패" 대응과 동일한
+    방식). 경고가 안 뜨면(항상 뜨는 건 아님) 아무 것도 안 하고 False를
+    반환한다 — 오류로 보지 않는다."""
     try:
         proceed_button = WebDriverWait(driver, timeout).until(
-            EC.element_to_be_clickable((By.ID, INSECURE_FORM_PROCEED_BUTTON_ID))
+            EC.presence_of_element_located((By.ID, INSECURE_FORM_PROCEED_BUTTON_ID))
         )
     except TimeoutException:
         return False
 
     emit_log("크롬의 '안전하지 않은 정보를 제출하려 함' 경고 감지 - '무시하고 보내기' 클릭")
-    proceed_button.click()
+    driver.execute_script("arguments[0].click();", proceed_button)
     time.sleep(config.REQUEST_DELAY_SECONDS)
     return True
 
@@ -179,5 +186,10 @@ def go_to_integrated_lms(driver) -> None:
 
     # SSO 리다이렉트 체인(폼 제출 -> login_check.php -> 최종 목적지)이 끝날 시간을 준다.
     time.sleep(config.REQUEST_DELAY_SECONDS * 2)
+
+    # 리다이렉트 체인 중간(처음 확인했을 때는 아직 안 뜬 상태)에 경고가 뜰 수도
+    # 있어 한 번 더 짧게 확인한다. 이미 통과했으면 바로 False로 빠진다.
+    _dismiss_insecure_form_warning(driver, timeout=3)
+
     emit_log(f"현재 URL: {driver.current_url}")
     emit_log(f"페이지 제목: {driver.title}")
