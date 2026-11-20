@@ -64,6 +64,12 @@ def emit_book_record(book: dict) -> None:
     emit({"type": "record", "kind": "book", "book": book})
 
 
+def emit_naver_settlement_record(row: dict) -> None:
+    """네이버 정산 정리 표의 행(데이터/소계/합계) 한 건이 확정될 때마다
+    즉시 화면 표에 반영할 수 있도록 스트리밍."""
+    emit({"type": "record", "kind": "naver_settlement", "naverSettlement": row})
+
+
 def emit_book_mark_shipped_record(result: dict) -> None:
     """택배사 송장 행을 전화번호로 LMS '준비' 주문과 대조해 '배송중' +
     송장번호로 저장 처리한 결과(건별 성공/실패와 사유) 한 건이 확정될

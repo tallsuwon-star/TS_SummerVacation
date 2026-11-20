@@ -21,6 +21,8 @@ from .jobs import (
     expense_write,
     login_test,
     morning_special_stats,
+    naver_settlement_generate,
+    naver_settlement_parse,
     naver_store_report,
     office_report_crawl,
     office_report_submit,
@@ -57,6 +59,8 @@ JOBS = {
     "book_invoice_parse": book_invoice_parse.run,
     "book_invoice_write": book_invoice_write.run,
     "book_mark_shipped": book_mark_shipped.run,
+    "naver_settlement_parse": naver_settlement_parse.run,
+    "naver_settlement_generate": naver_settlement_generate.run,
 }
 
 

@@ -593,6 +593,11 @@ textarea {
   color: var(--danger);
 }
 
+.dashboard-table tr.settlement-summary-row td {
+  font-weight: 700;
+  background: var(--surface-alt);
+}
+
 .dashboard-table .empty {
   text-align: center;
   color: var(--text-muted);
