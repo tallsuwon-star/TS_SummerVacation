@@ -204,9 +204,35 @@ def build_settlement_rows(file_path: str) -> list[dict]:
     return output_rows
 
 
+# 사용자가 실제로 쓰던 제출용 파일의 서식을 그대로 옮겼다 (셀 색까지
+# openpyxl로 직접 확인한 값):
+#   - 헤더 행: 연보라 배경 + 굵게. 새로 추가한 '정산예정금액(A+B+C+D)' 칸만
+#     빨간 글씨로 — "이 칸은 원본에 없던 추가 칸"이라는 표시로 보인다.
+#   - 날짜별 소계 행: 연회색 배경(전 칸), 그중 정산완료일~정산예정금액
+#     칸(상품명/정산상태 제외)만 굵게.
+#   - 맨 아래 전체 합계 행: 주황/금색 배경(전 칸) + 전 칸 굵게.
+_HEADER_FILL = "FFCCCAFD"
+_SUBTOTAL_FILL = "FFF2F2F2"
+_TOTAL_FILL = "FFFFC000"
+_ADDED_COLUMN_FONT_COLOR = "FFFF0000"
+_ADDED_COLUMN_HEADER = "정산예정금액(A+B+C+D)"
+
+# 소계 행에서 굵게 표시할 칸 (상품명/정산상태 제외 — 사용자 원본 파일과 동일).
+_SUBTOTAL_BOLD_HEADERS = {
+    "정산완료일",
+    "정산기준금액(A)",
+    "Npay 수수료(B)",
+    "매출연동 수수료 합계(C)",
+    "무이자할부 수수료(D)",
+    "정산예정금액(A+B+C+D)",
+}
+
+
 def write_settlement_rows(rows: list[dict], output_path) -> None:
     """build_settlement_rows()가 만든(그리고 화면에서 확인된) 행을 그대로
-    새 엑셀로 저장한다. 소계/합계 행은 굵게 표시해 한눈에 구분되게 한다.
+    새 엑셀로 저장한다. 사용자가 실제로 쓰던 파일과 같은 색/굵게 서식을
+    그대로 입힌다 — 소계/합계 행을 단순히 굵게만 하는 게 아니라, 헤더
+    연보라, 소계 연회색, 전체 합계 주황색까지 재현한다.
 
     일렉트론을 거쳐 JSON으로 왕복한 rows라 정산완료일은 전부 문자열이다.
     소계 행("YYYY.MM.DD" 형식)만 실제 날짜 타입으로 되돌려 써서, 기존에
@@ -218,7 +244,16 @@ def write_settlement_rows(rows: list[dict], output_path) -> None:
     worksheet.title = "결제정산 - 일별상세"
     worksheet.append(OUTPUT_HEADERS)
 
+    header_fill = openpyxl.styles.PatternFill(fill_type="solid", fgColor=_HEADER_FILL)
+    subtotal_fill = openpyxl.styles.PatternFill(fill_type="solid", fgColor=_SUBTOTAL_FILL)
+    total_fill = openpyxl.styles.PatternFill(fill_type="solid", fgColor=_TOTAL_FILL)
     bold_font = openpyxl.styles.Font(bold=True)
+    added_column_header_font = openpyxl.styles.Font(bold=True, color=_ADDED_COLUMN_FONT_COLOR)
+
+    header_cells = worksheet[1]
+    for i, cell in enumerate(header_cells):
+        cell.fill = header_fill
+        cell.font = added_column_header_font if OUTPUT_HEADERS[i] == _ADDED_COLUMN_HEADER else bold_font
 
     for row in rows:
         row_type = row.get("rowType")
@@ -238,8 +273,15 @@ def write_settlement_rows(rows: list[dict], output_path) -> None:
                 row.get("status"),
             ]
         )
-        if row_type in ("subtotal", "total"):
+
+        if row_type == "subtotal":
+            for i, cell in enumerate(worksheet[worksheet.max_row]):
+                cell.fill = subtotal_fill
+                if OUTPUT_HEADERS[i] in _SUBTOTAL_BOLD_HEADERS:
+                    cell.font = bold_font
+        elif row_type == "total":
             for cell in worksheet[worksheet.max_row]:
+                cell.fill = total_fill
                 cell.font = bold_font
 
     workbook.save(output_path)

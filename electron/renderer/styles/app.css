@@ -593,9 +593,26 @@ textarea {
   color: var(--danger);
 }
 
-.dashboard-table tr.settlement-summary-row td {
+/* 네이버 정산 정리 표: 실제 저장되는 엑셀 서식과 같은 색으로 보여준다
+   (헤더 연보라 + 새로 추가한 칸은 빨간 글씨, 소계 연회색, 전체 합계 주황). */
+.settlement-table .settlement-added-col {
+  color: #c0392b;
+}
+
+.dashboard-table tr.settlement-subtotal-row td {
   font-weight: 700;
-  background: var(--surface-alt);
+  background: #f2f2f2;
+  color: #2b2620;
+}
+
+.dashboard-table tr.settlement-subtotal-row td.settlement-dim-cell {
+  font-weight: 400;
+}
+
+.dashboard-table tr.settlement-total-row td {
+  font-weight: 700;
+  background: #ffc000;
+  color: #2b2620;
 }
 
 .dashboard-table .empty {

@@ -26,7 +26,7 @@ function renderNaverSettlementView(container) {
         <span id="settlement-search-count" class="tutor-roster-count"></span>
       </div>
       <div class="table-wrap" style="overflow-x: auto;">
-      <table class="dashboard-table" id="settlement-table">
+      <table class="dashboard-table settlement-table" id="settlement-table">
         <thead>
           <tr>
             <th>상품명</th>
@@ -35,7 +35,7 @@ function renderNaverSettlementView(container) {
             <th>Npay 수수료(B)</th>
             <th>매출연동 수수료 합계(C)</th>
             <th>무이자할부 수수료(D)</th>
-            <th>정산예정금액(A+B+C+D)</th>
+            <th class="settlement-added-col">정산예정금액(A+B+C+D)</th>
             <th>정산상태</th>
           </tr>
         </thead>
@@ -159,18 +159,21 @@ function renderNaverSettlementView(container) {
     } else {
       tableBody.innerHTML = filtered
         .map((r) => {
-          const isSummary = r.rowType === 'subtotal' || r.rowType === 'total';
-          const rowClass = isSummary ? 'settlement-summary-row' : '';
+          // 실제 저장되는 엑셀 서식(헤더 연보라/새 칸 빨간 글씨, 소계 연회색,
+          // 전체 합계 주황색)과 화면에 보이는 색이 어긋나지 않도록 똑같이 맞춘다.
+          const rowClass =
+            r.rowType === 'subtotal' ? 'settlement-subtotal-row' : r.rowType === 'total' ? 'settlement-total-row' : '';
+          const dimCell = r.rowType === 'subtotal' ? ' class="settlement-dim-cell"' : '';
           return `
             <tr class="${rowClass}">
-              <td>${escapeHtml(r.productName) || ''}</td>
+              <td${dimCell}>${escapeHtml(r.productName) || ''}</td>
               <td>${escapeHtml(formatDate(r.settleDate))}</td>
               <td>${formatNumber(r.amountA)}</td>
               <td>${formatNumber(r.feeB)}</td>
               <td>${formatNumber(r.feeC)}</td>
               <td>${formatNumber(r.feeD)}</td>
               <td>${formatNumber(r.expectedTotal)}</td>
-              <td>${escapeHtml(r.status) || ''}</td>
+              <td${dimCell}>${escapeHtml(r.status) || ''}</td>
             </tr>
           `;
         })
