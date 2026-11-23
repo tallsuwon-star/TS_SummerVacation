@@ -30,6 +30,13 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.removeAllListeners('job:statusChanged');
     ipcRenderer.on('job:statusChanged', (_event, data) => callback(data));
   },
+
+  // 작업이 성공적으로 끝났을 때 요약을 화면과 무관하게 받는 채널 (업무보고
+  // "오늘의 활동 기록"이 미납자 관리 같은 특정 작업 완료를 자동으로 기록하는 데 씀).
+  onJobCompletedSummary: (callback) => {
+    ipcRenderer.removeAllListeners('job:completedSummary');
+    ipcRenderer.on('job:completedSummary', (_event, data) => callback(data));
+  },
   onJobProgress: (callback) => {
     ipcRenderer.removeAllListeners('job:progress');
     ipcRenderer.on('job:progress', (_event, data) => callback(data));

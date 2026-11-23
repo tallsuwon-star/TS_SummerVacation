@@ -46,6 +46,13 @@ const store = new Store({
     //   - 'todo': 알림 없이 목록에만 표시.
     // [{ id, title, mode, time, intervalMinutes, lastFiredDate, lastFiredAt, lastCompletedDate }]
     todayTasks: [],
+    // 업무보고용 "오늘의 활동 기록". 날짜별로 쌓인다 — 루틴 완료 체크
+    // (todayPanel.js), 급하게 추가한 업무, 특정 작업(미납자 관리 등) 완료,
+    // 지피티/클로드 대화 첨부를 한 곳에 모아두고, 업무보고 작성 시 어떤 걸
+    // 실제로 포함할지(included) 사용자가 직접 골라서 넣을 수 있게 한다.
+    // { "YYYY-MM-DD": [{ id, time, source, title, detail, url, included }] }
+    // source: 'routine' | 'adhoc' | 'job' | 'conversation'
+    activityLog: {},
   },
 });
 

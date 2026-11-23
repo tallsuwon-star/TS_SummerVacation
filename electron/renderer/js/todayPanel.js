@@ -180,10 +180,18 @@ function initTodayPanel() {
     sectionsEl.querySelectorAll('.today-task-complete-cb').forEach((cb) => {
       cb.addEventListener('change', async () => {
         const allTasks = await getTasks();
+        const task = allTasks.find((t) => t.id === cb.dataset.id);
         const updated = allTasks.map((t) =>
           t.id === cb.dataset.id ? { ...t, lastCompletedDate: cb.checked ? today : null } : t
         );
         await saveTasks(updated);
+
+        // 완료 체크하면(완료 해제가 아니라) 업무보고가 가져다 쓸 수 있도록
+        // "오늘의 활동 기록"에도 자동으로 남긴다.
+        if (cb.checked && task && window.activityLog) {
+          window.activityLog.append({ source: 'routine', title: task.title });
+        }
+
         render();
       });
     });

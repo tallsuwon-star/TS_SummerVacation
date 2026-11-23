@@ -83,6 +83,7 @@ function start(payload, mainWindow) {
     });
     currentProcess = child;
     currentJobId = payload.jobId;
+    let lastDoneSummary = null; // job:completedSummary로 끝난 뒤 한 번에 넘겨줄 요약
     broadcastStatus(mainWindow);
 
     // spawn 자체가 실패하면(예: command를 찾을 수 없음) 'error' 이벤트가 발생한다.
@@ -114,6 +115,7 @@ function start(payload, mainWindow) {
         } else if (data.type === 'record') {
           mainWindow?.webContents.send('job:record', data);
         } else if (data.type === 'done') {
+          lastDoneSummary = data.summary;
           mainWindow?.webContents.send('job:done', data);
         } else {
           mainWindow?.webContents.send('job:log', data);
@@ -130,6 +132,14 @@ function start(payload, mainWindow) {
     child.on('close', (code) => {
       mainWindow?.webContents.send('job:done', { type: 'done', code });
       if (currentProcess === child) {
+        // 어떤 화면을 보고 있든 특정 작업(예: 미납자 관리)이 끝났다는 걸
+        // 알아채 업무보고용 "오늘의 활동 기록"에 자동으로 남길 수 있도록,
+        // job:statusChanged와 같은 방식으로 완료 요약을 별도 채널로도 보낸다
+        // (화면별 job:done 리스너는 하나만 유지되는 구조라 다른 화면에서는
+        // 못 받기 때문).
+        if (code === 0 && lastDoneSummary) {
+          mainWindow?.webContents.send('job:completedSummary', { jobId: currentJobId, summary: lastDoneSummary });
+        }
         currentProcess = null;
         currentJobId = null;
         broadcastStatus(mainWindow);

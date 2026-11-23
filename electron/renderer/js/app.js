@@ -81,6 +81,7 @@ async function bootstrap() {
   initLmsSettingsModal();
   window.initRunningJobStatus();
   window.initTodayPanel();
+  window.activityLog.initAutoCapture();
   window.sidebar.renderJobNav();
   await window.sidebar.renderInstallNav();
   window.sidebar.wireInstallModal();

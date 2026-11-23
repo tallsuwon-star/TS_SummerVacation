@@ -65,6 +65,69 @@ function renderWorkReportView(container) {
       </div>
     </section>
 
+    <section class="panel">
+      <div class="field-label login-test-label">오늘의 활동 기록</div>
+      <div class="field-hint" style="margin-top: 0;">
+        루틴 업무를 완료 체크하면(오른쪽 "오늘 할 일" 패널), 미납자 관리
+        조회가 끝나면 자동으로 여기에 쌓입니다. 급하게 처리한 업무나
+        지피티/클로드와 나눈 대화도 직접 추가할 수 있습니다. 체크된
+        항목만 "금일 업무 내용"에 포함되니, 올리고 싶지 않은 건 체크를
+        풀거나 삭제하면 됩니다.
+      </div>
+      <table class="dashboard-table" id="activity-log-table">
+        <thead>
+          <tr>
+            <th style="width: 32px;"></th>
+            <th>시각</th>
+            <th>구분</th>
+            <th>내용</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="activity-log-table-body">
+          <tr><td colspan="5" class="empty">오늘 기록된 활동이 없습니다.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="criteria-panel" style="margin-top: 10px;">
+        <div class="field">
+          <label class="field-label" for="activity-add-title">업무명</label>
+          <input type="text" id="activity-add-title" placeholder="예: 서버 긴급 재시작" />
+        </div>
+        <div class="field">
+          <label class="field-label" for="activity-add-detail">상세 (선택)</label>
+          <input type="text" id="activity-add-detail" placeholder="예: 5분간 접속 장애 대응" />
+        </div>
+        <div class="field">
+          <label class="field-label" for="activity-add-url">링크 (선택)</label>
+          <input type="text" id="activity-add-url" placeholder="LMS/시트/문서 링크 등" />
+        </div>
+        <div class="field">
+          <label class="field-label">&nbsp;</label>
+          <button id="activity-add-btn" class="btn btn-ghost">+ 업무 추가</button>
+        </div>
+      </div>
+
+      <div class="criteria-panel" style="margin-top: 10px;">
+        <div class="field">
+          <label class="field-label" for="activity-conversation-title">지피티/클로드 대화 제목</label>
+          <input type="text" id="activity-conversation-title" placeholder="예: 환불 로직 설계 상담" />
+        </div>
+        <div class="field" style="flex: 1;">
+          <label class="field-label" for="activity-conversation-file">대화 내용 파일 (선택, 내보낸 텍스트/HTML 등)</label>
+          <input type="file" id="activity-conversation-file" />
+        </div>
+        <div class="field">
+          <label class="field-label">&nbsp;</label>
+          <button id="activity-conversation-add-btn" class="btn btn-ghost">+ 대화 추가</button>
+        </div>
+      </div>
+      <div class="field-hint" style="margin-top: 6px;">
+        파일을 선택하면 업무보고 제출 시 첨부파일로 같이 올라갑니다. 파일
+        없이 제목만 남겨도 기록은 됩니다.
+      </div>
+    </section>
+
     <section class="panel" id="daily-mode-section">
       <div class="field">
         <label class="field-label" for="daily-work">금일 업무 내용</label>
@@ -206,6 +269,14 @@ function renderWorkReportView(container) {
   const jobLogOutput = document.getElementById('job-log-output');
   const jobLogSearchInput = document.getElementById('job-log-search');
   const jobLogSearchCount = document.getElementById('job-log-search-count');
+  const activityTableBody = document.getElementById('activity-log-table-body');
+  const activityAddTitleInput = document.getElementById('activity-add-title');
+  const activityAddDetailInput = document.getElementById('activity-add-detail');
+  const activityAddUrlInput = document.getElementById('activity-add-url');
+  const activityAddBtn = document.getElementById('activity-add-btn');
+  const activityConversationTitleInput = document.getElementById('activity-conversation-title');
+  const activityConversationFileInput = document.getElementById('activity-conversation-file');
+  const activityConversationAddBtn = document.getElementById('activity-conversation-add-btn');
 
   let fetchedCommits = [];
   let settings = null;
@@ -213,6 +284,8 @@ function renderWorkReportView(container) {
   let workItems = []; // [{ title, progress, decreaseReason }]
   let activeJobKind = null; // 'crawl' | 'submit'
   let latestOfficeData = null; // window.api.getOfficeReports() 결과, 미리보기에 사용
+  let activityEntries = []; // 현재 선택된 날짜의 "오늘의 활동 기록" (window.activityLog)
+  let conversationAttachPaths = []; // 지피티/클로드 대화 첨부 파일 (제출 시 upload_files[]에 합쳐짐)
 
   function todayIso() {
     const d = new Date();
@@ -253,7 +326,7 @@ function renderWorkReportView(container) {
     fetchedCommits = [];
     applyCommitsBtn.disabled = true;
     commitsOutput.innerHTML = '<div class="empty-view">새로고침을 눌러 오늘 이 저장소에 커밋한 내역을 불러오세요.</div>';
-    renderSubmitPreview();
+    refreshActivityLog();
   }
 
   async function saveDraft() {
@@ -385,6 +458,110 @@ function renderWorkReportView(container) {
     });
   }
 
+  function escapeHtml(text) {
+    return String(text || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // ---- 오늘의 활동 기록 (루틴 완료/작업 자동 기록/급한 업무 추가/대화 첨부) ----
+  const ACTIVITY_SOURCE_LABEL = { routine: '루틴', adhoc: '추가', job: '자동', conversation: '대화' };
+
+  async function refreshActivityLog() {
+    activityEntries = await window.activityLog.get(dateInput.value);
+    renderActivityLog();
+    renderSubmitPreview();
+  }
+
+  function renderActivityLog() {
+    if (activityEntries.length === 0) {
+      activityTableBody.innerHTML = '<tr><td colspan="5" class="empty">기록된 활동이 없습니다.</td></tr>';
+      return;
+    }
+
+    activityTableBody.innerHTML = activityEntries
+      .map((e) => {
+        const included = e.included !== false;
+        const titleHtml = e.url
+          ? `<a href="#" class="activity-link" data-url="${escapeHtml(e.url)}">${escapeHtml(e.title)}</a>`
+          : escapeHtml(e.title);
+        const detailHtml = e.detail ? ` <span class="field-label">${escapeHtml(e.detail)}</span>` : '';
+        return `
+          <tr class="${included ? '' : 'row-failed'}">
+            <td><input type="checkbox" class="activity-include-cb" data-id="${e.id}" ${included ? 'checked' : ''} /></td>
+            <td>${escapeHtml(e.time)}</td>
+            <td><span class="status-badge status-pending">${escapeHtml(ACTIVITY_SOURCE_LABEL[e.source] || e.source)}</span></td>
+            <td>${titleHtml}${detailHtml}</td>
+            <td><button type="button" class="btn btn-ghost activity-delete-btn" data-id="${e.id}">삭제</button></td>
+          </tr>
+        `;
+      })
+      .join('');
+
+    activityTableBody.querySelectorAll('.activity-include-cb').forEach((cb) => {
+      cb.addEventListener('change', async () => {
+        await window.activityLog.update(dateInput.value, cb.dataset.id, { included: cb.checked });
+        await refreshActivityLog();
+      });
+    });
+    activityTableBody.querySelectorAll('.activity-delete-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        await window.activityLog.remove(dateInput.value, btn.dataset.id);
+        await refreshActivityLog();
+      });
+    });
+    activityTableBody.querySelectorAll('.activity-link').forEach((a) => {
+      a.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        window.api.openExternal(a.dataset.url);
+      });
+    });
+  }
+
+  activityAddBtn.addEventListener('click', async () => {
+    const title = activityAddTitleInput.value.trim();
+    if (!title) {
+      alert('업무명을 입력해주세요.');
+      return;
+    }
+    await window.activityLog.append({
+      source: 'adhoc',
+      title,
+      detail: activityAddDetailInput.value.trim(),
+      url: activityAddUrlInput.value.trim() || null,
+      dateKey: dateInput.value,
+    });
+    activityAddTitleInput.value = '';
+    activityAddDetailInput.value = '';
+    activityAddUrlInput.value = '';
+    await refreshActivityLog();
+  });
+
+  activityConversationAddBtn.addEventListener('click', async () => {
+    const title = activityConversationTitleInput.value.trim();
+    const file = activityConversationFileInput.files && activityConversationFileInput.files[0];
+    if (!title && !file) {
+      alert('대화 제목이나 파일 중 하나는 입력해주세요.');
+      return;
+    }
+
+    const filePath = file ? window.api.getPathForFile(file) : null;
+    if (filePath) conversationAttachPaths.push(filePath);
+
+    await window.activityLog.append({
+      source: 'conversation',
+      title: title || (file ? file.name : '지피티/클로드 대화'),
+      detail: file ? `첨부: ${file.name}` : '',
+      dateKey: dateInput.value,
+    });
+
+    activityConversationTitleInput.value = '';
+    activityConversationFileInput.value = '';
+    await refreshActivityLog();
+  });
+
   function hasBlockingDecreaseReasons() {
     return workItems.some((item) => {
       const prevItem = item.title ? findPreviousItem(item.title) : null;
@@ -418,6 +595,8 @@ function renderWorkReportView(container) {
         .join('');
       if (items) parts.push(`<ul>${items}</ul>`);
     }
+    const activityHtml = window.activityLog.buildHtml(activityEntries);
+    if (activityHtml) parts.push(activityHtml);
     return parts.join('');
   }
 
@@ -730,9 +909,13 @@ function renderWorkReportView(container) {
     hideSubmitResult();
     activeJobKind = 'submit';
 
-    const filePaths = Array.from(attachFilesInput.files || [])
-      .map((f) => window.api.getPathForFile(f))
-      .filter(Boolean);
+    const filePaths = [
+      ...Array.from(attachFilesInput.files || [])
+        .map((f) => window.api.getPathForFile(f))
+        .filter(Boolean),
+      // 지피티/클로드 대화 첨부로 선택한 파일도 같이 업로드한다.
+      ...conversationAttachPaths,
+    ];
 
     const payload = {
       jobId: 'office_report_submit',
