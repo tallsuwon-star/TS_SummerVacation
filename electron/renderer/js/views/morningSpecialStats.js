@@ -152,7 +152,7 @@ function renderMorningSpecialStatsView(container) {
     </section>
 
     <div class="view-header">
-      <h1>오전특강 통계</h1>
+      <h1>오전특강 통계 - 보강권 지급 자동화 (상담관리 기록 집계)</h1>
       <div class="job-controls">
         <button id="start-btn" class="btn btn-primary">시작</button>
         <button id="pause-btn" class="btn btn-ghost" disabled>일시정지</button>
@@ -160,6 +160,7 @@ function renderMorningSpecialStatsView(container) {
         <button id="copy-btn" class="btn btn-ghost" disabled>결과 클립보드 복사</button>
       </div>
     </div>
+    <div class="field-hint">선택한 강사들의 상담관리 기록에서 이미 지급된 보강권 건수를 자동으로 돌며 집계해 구글시트에 쌓습니다. (실제 보강권을 새로 지급하는 동작은 하지 않습니다 — 지급 여부/건수를 모아서 보는 용도.)</div>
 
     <section class="panel">
       <div class="field-label">강사 명단 선택</div>
