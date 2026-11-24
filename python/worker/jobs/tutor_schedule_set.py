@@ -39,19 +39,78 @@ def _close_popups_except(driver, keep_handle: str) -> None:
     driver.switch_to.window(keep_handle)
 
 
-def run(job_payload: dict, control: ControlState) -> None:
+def _build_tutor_jobs_from_cartesian(job_payload: dict) -> dict[str, list[dict]] | None:
+    """기존 방식: 체크박스로 고른 강사 x 요일 x 슬롯에 전부 같은 state를 적용.
+    강사별로 적용할 (요일, 시, 시작분, state) 목록을 만들어 반환한다."""
     tutor_names = [name.strip() for name in (job_payload.get("tutorNames") or []) if name and name.strip()]
     weekdays = [int(w) for w in (job_payload.get("weekdays") or [])]
     state = (job_payload.get("state") or "").strip()
     slots = job_payload.get("slots") or []
 
     if not tutor_names or not weekdays or not state or not slots:
-        emit_log("강사/요일/상태/시간 슬롯을 모두 선택해주세요.", level="error")
+        return None
+
+    tutor_jobs: dict[str, list[dict]] = {}
+    for tutor_name in tutor_names:
+        changes = []
+        for weekday in weekdays:
+            for slot in slots:
+                changes.append(
+                    {
+                        "weekday": weekday,
+                        "hour": int(slot.get("hour")),
+                        "startMinute": int(slot.get("startMinute", 0)),
+                        "state": state,
+                    }
+                )
+        tutor_jobs[tutor_name] = changes
+    return tutor_jobs
+
+
+def _build_tutor_jobs_from_entries(job_payload: dict) -> dict[str, list[dict]] | None:
+    """새 방식: 텍스트 분석으로 뽑아낸, 강사마다 서로 다른 요일/시간을 적용하는
+    건별 목록(entries). 하나의 entry가 여러 요일(weekdays)을 가질 수 있어
+    (예: MWF 블록 하나가 월/수/금에 동시 적용), 강사별로 (요일, 시, 시작분, state)
+    변경 건들로 풀어서 모은다. 같은 강사 안에서 완전히 같은 변경 건이 여러 번
+    들어오면(여러 학생이 같은 강사의 같은 시간을 공유) 한 번만 적용하도록
+    중복을 제거한다."""
+    entries = job_payload.get("entries")
+    if not entries:
+        return None
+
+    tutor_jobs: dict[str, list[dict]] = {}
+    for entry in entries:
+        tutor_name = (entry.get("tutorName") or entry.get("tutor") or "").strip()
+        if not tutor_name:
+            continue
+        state = (entry.get("state") or "close").strip()
+        hour = int(entry.get("hour"))
+        start_minute = int(entry.get("startMinute", 0))
+        weekdays = entry.get("weekdays")
+        if weekdays is None:
+            weekdays = [entry.get("weekday")]
+
+        changes = tutor_jobs.setdefault(tutor_name, [])
+        for weekday in weekdays:
+            change = {"weekday": int(weekday), "hour": hour, "startMinute": start_minute, "state": state}
+            if change not in changes:
+                changes.append(change)
+
+    return tutor_jobs
+
+
+def run(job_payload: dict, control: ControlState) -> None:
+    tutor_jobs = _build_tutor_jobs_from_entries(job_payload)
+    if tutor_jobs is None:
+        tutor_jobs = _build_tutor_jobs_from_cartesian(job_payload)
+
+    if not tutor_jobs:
+        emit_log("설정할 강사/요일/시간 정보가 없습니다.", level="error")
         emit_done({"success": False, "error": "missing-input"})
         return
 
-    total_count = len(tutor_names) * len(weekdays) * len(slots)
-    emit_log(f"강사 {len(tutor_names)}명 x 요일 {len(weekdays)}개 x 시간 {len(slots)}개 = 총 {total_count}건 처리 시작")
+    total_count = sum(len(changes) for changes in tutor_jobs.values())
+    emit_log(f"강사 {len(tutor_jobs)}명, 총 {total_count}건 처리 시작")
 
     driver = build_driver()
     done_count = 0
@@ -61,7 +120,7 @@ def run(job_payload: dict, control: ControlState) -> None:
         go_to_native_tutor_schedule(driver)
         search_window = driver.current_window_handle
 
-        for tutor_name in tutor_names:
+        for tutor_name, changes in tutor_jobs.items():
             if control.should_stop():
                 stopped = True
                 break
@@ -73,39 +132,32 @@ def run(job_payload: dict, control: ControlState) -> None:
             open_schedule_checkboxes(driver)
             wait_for_schedule_page(driver)
 
-            for weekday in weekdays:
+            for change in changes:
                 if control.should_stop():
                     stopped = True
                     break
+                control.wait_if_paused()
+
+                weekday = change["weekday"]
                 weekday_name = WEEKDAY_NAMES[weekday]
+                hour = change["hour"]
+                start_minute = change["startMinute"]
+                time_label = f"{hour:02d}:{start_minute:02d}"
 
-                for slot in slots:
-                    if control.should_stop():
-                        stopped = True
-                        break
-                    control.wait_if_paused()
-
-                    hour = int(slot.get("hour"))
-                    start_minute = int(slot.get("startMinute", 0))
-                    time_label = f"{hour:02d}:{start_minute:02d}"
-
-                    before_label, after_label = set_hour_state(
-                        driver, weekday, hour, state, start_minute=start_minute
-                    )
-                    done_count += 1
-                    emit_log(f"({done_count}/{total_count}) {tutor_name} {weekday_name}요일 {time_label}")
-                    emit_tutor_schedule_record(
-                        {
-                            "tutor": tutor_name,
-                            "weekday": weekday_name,
-                            "time": time_label,
-                            "before": before_label,
-                            "after": after_label,
-                        }
-                    )
-
-                if stopped:
-                    break
+                before_label, after_label = set_hour_state(
+                    driver, weekday, hour, change["state"], start_minute=start_minute
+                )
+                done_count += 1
+                emit_log(f"({done_count}/{total_count}) {tutor_name} {weekday_name}요일 {time_label}")
+                emit_tutor_schedule_record(
+                    {
+                        "tutor": tutor_name,
+                        "weekday": weekday_name,
+                        "time": time_label,
+                        "before": before_label,
+                        "after": after_label,
+                    }
+                )
 
             if stopped:
                 emit_log(f"사용자 요청으로 중단합니다 ({tutor_name}은(는) 제출하지 않았습니다).")

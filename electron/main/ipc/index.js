@@ -35,6 +35,9 @@ function registerIpcHandlers(mainWindow) {
   ipcMain.handle('report:getTodayCommits', () => gitLog.getTodayCommits());
   ipcMain.handle('report:getOfficeReports', () => officeReports.getLatestReports());
   ipcMain.handle('report:tidyText', (_event, rawText) => anthropicClient.tidyText(rawText));
+  ipcMain.handle('tutorSchedule:parseText', (_event, { rawText, knownTutors }) =>
+    anthropicClient.parseTutorScheduleText(rawText, knownTutors)
+  );
 
   ipcMain.handle('file:reveal', (_event, sourcePath) => fileSave.revealFile(sourcePath));
   ipcMain.handle('link:openExternal', (_event, url) => fileSave.openExternal(url));

@@ -465,7 +465,7 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  max-height: 220px;
+  max-height: 380px;
   overflow-y: auto;
   margin-bottom: 10px;
 }
@@ -485,6 +485,19 @@ textarea {
   border-radius: 4px;
   padding: 1px 6px;
   white-space: nowrap;
+}
+
+.black-time-roster-center-group {
+  margin-bottom: 6px;
+}
+
+.black-time-roster-center-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted, #888);
+  padding: 4px 2px 2px;
+  border-bottom: 1px solid var(--border, rgba(128, 128, 128, 0.25));
+  margin-bottom: 2px;
 }
 
 .file-input-row {

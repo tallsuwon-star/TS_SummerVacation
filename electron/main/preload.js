@@ -66,6 +66,11 @@ contextBridge.exposeInMainWorld('api', {
   // 업무보고: Claude API로 메모 정리하기
   tidyText: (rawText) => ipcRenderer.invoke('report:tidyText', rawText),
 
+  // 강사 스케줄 변경 요청(자유 형식 텍스트)을 Claude API로 분석해 (강사, 요일, 시각, 상태)
+  // 목록으로 뽑아낸다. knownTutors를 같이 보내면 명단에 있는 표기로 이름을 맞춰준다.
+  parseTutorScheduleText: (rawText, knownTutors) =>
+    ipcRenderer.invoke('tutorSchedule:parseText', { rawText, knownTutors }),
+
   // 업무보고: <input type="file">로 고른 파일의 실제 경로 (Electron 32+에서는
   // File.path가 제거되어 webUtils.getPathForFile로만 얻을 수 있다).
   getPathForFile: (file) => webUtils.getPathForFile(file),

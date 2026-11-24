@@ -60,6 +60,9 @@ function renderMorningSpecialStatsView(container) {
         <button id="black-time-roster-add-btn" type="button" class="btn btn-ghost">추가</button>
         <button id="black-time-roster-select-all-btn" type="button" class="btn btn-ghost">전체 선택</button>
         <button id="black-time-roster-deselect-all-btn" type="button" class="btn btn-ghost">전체 해제</button>
+      </div>
+      <div class="tutor-roster-actions">
+        <input type="text" id="black-time-roster-search" class="roster-search-input" placeholder="강사 이름으로 검색..." />
         <select id="black-time-roster-center-filter">
           <option value="">센터 전체 보기</option>
         </select>
@@ -115,6 +118,37 @@ function renderMorningSpecialStatsView(container) {
           <tr><td colspan="5" class="empty">아직 설정한 내역이 없습니다.</td></tr>
         </tbody>
       </table>
+    </section>
+
+    <section class="panel">
+      <div class="field-label login-test-label">텍스트로 블랙/화이트 타임 일괄 설정 (카카오톡/슬랙 공지 등을 그대로 붙여넣으면 Claude가 강사/요일/시간을 읽어줍니다)</div>
+      <textarea id="schedule-text-input" rows="10" placeholder="예시:
+📍 MWF(블랙타임변경)
+→ STUDENT A
+➤ LETTIE - 14:00KT-14:45KT
+..."></textarea>
+      <div class="inline-row">
+        <button id="schedule-text-parse-btn" class="btn btn-primary">텍스트 분석</button>
+        <span id="schedule-text-parse-status" class="status-badge status-pending">대기중</span>
+      </div>
+      <div class="field-hint">분석 결과는 바로 실행되지 않습니다. 아래에서 각 항목을 확인/체크한 뒤 "선택한 항목 설정 실행"을 눌러야 실제로 적용됩니다.</div>
+
+      <div id="schedule-text-warnings" class="field-hint"></div>
+
+      <table class="dashboard-table" id="schedule-text-preview-table">
+        <thead>
+          <tr><th><input type="checkbox" id="schedule-text-preview-select-all" /></th><th>강사명</th><th>요일</th><th>시간</th><th>상태</th></tr>
+        </thead>
+        <tbody id="schedule-text-preview-body">
+          <tr><td colspan="5" class="empty">아직 분석한 내역이 없습니다.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="inline-row">
+        <button id="schedule-text-apply-btn" class="btn btn-primary" disabled>선택한 항목 설정 실행 (실제 제출됨)</button>
+        <button id="schedule-text-apply-stop-btn" class="btn btn-danger" disabled>중단</button>
+        <span id="schedule-text-apply-status" class="status-badge status-pending">대기중</span>
+      </div>
     </section>
 
     <div class="view-header">
@@ -334,6 +368,18 @@ function renderMorningSpecialStatsView(container) {
   const tutorSlotRangeBtn = document.getElementById('tutor-slot-range-btn');
   const tutorScheduleResultsBody = document.getElementById('tutor-schedule-results-body');
 
+  const blackTimeRosterSearchEl = document.getElementById('black-time-roster-search');
+
+  const scheduleTextInput = document.getElementById('schedule-text-input');
+  const scheduleTextParseBtn = document.getElementById('schedule-text-parse-btn');
+  const scheduleTextParseStatus = document.getElementById('schedule-text-parse-status');
+  const scheduleTextWarningsEl = document.getElementById('schedule-text-warnings');
+  const scheduleTextPreviewBody = document.getElementById('schedule-text-preview-body');
+  const scheduleTextPreviewSelectAll = document.getElementById('schedule-text-preview-select-all');
+  const scheduleTextApplyBtn = document.getElementById('schedule-text-apply-btn');
+  const scheduleTextApplyStopBtn = document.getElementById('schedule-text-apply-stop-btn');
+  const scheduleTextApplyStatus = document.getElementById('schedule-text-apply-status');
+
   const startBtn = document.getElementById('start-btn');
   const pauseBtn = document.getElementById('pause-btn');
   const stopBtn = document.getElementById('stop-btn');
@@ -489,6 +535,7 @@ function renderMorningSpecialStatsView(container) {
   // 센터를 알 수 없으므로 이 맵에 없으면 '미분류'로 표시한다.
   let tutorCenterMap = {};
   let blackTimeRosterCenterFilter = '';
+  let blackTimeRosterSearchQuery = '';
 
   function persistTutorCenterMap() {
     window.api.setSettings({ tutorCenterMap });
@@ -511,31 +558,55 @@ function renderMorningSpecialStatsView(container) {
     blackTimeRosterCenterFilterEl.value = blackTimeRosterCenterFilter;
   }
 
+  // 센터별로 묶어서 나열한다 — 작은 체크박스 묶음 하나에 전부 뒤섞여 있던 것을
+  // 센터 구역으로 나눠, 강사 수가 많아도 어느 센터인지 한눈에 알 수 있게 한다.
   function renderBlackTimeRoster() {
     renderBlackTimeRosterCenterFilterOptions();
 
-    const sorted = [...blackTimeTutorRoster]
-      .filter((name) => {
-        if (!blackTimeRosterCenterFilter) return true;
+    const query = blackTimeRosterSearchQuery;
+    const visible = blackTimeTutorRoster.filter((name) => {
+      if (query && !name.toLowerCase().includes(query)) return false;
+      if (blackTimeRosterCenterFilter) {
         return (tutorCenterMap[name] || UNKNOWN_CENTER) === blackTimeRosterCenterFilter;
-      })
-      .sort((a, b) => a.localeCompare(b));
+      }
+      return true;
+    });
 
-    if (sorted.length === 0) {
+    if (visible.length === 0) {
       blackTimeRosterListEl.innerHTML = '<div class="field-hint">표시할 강사가 없습니다.</div>';
       return;
     }
 
-    blackTimeRosterListEl.innerHTML = sorted
-      .map((name, idx) => {
-        const center = tutorCenterMap[name] || UNKNOWN_CENTER;
+    const byCenter = new Map();
+    visible.forEach((name) => {
+      const center = tutorCenterMap[name] || UNKNOWN_CENTER;
+      if (!byCenter.has(center)) byCenter.set(center, []);
+      byCenter.get(center).push(name);
+    });
+
+    const centers = Array.from(byCenter.keys()).sort((a, b) => a.localeCompare(b));
+    let idx = 0;
+
+    blackTimeRosterListEl.innerHTML = centers
+      .map((center) => {
+        const names = byCenter.get(center).sort((a, b) => a.localeCompare(b));
+        const rows = names
+          .map((name) => {
+            const rowIdx = idx++;
+            return `
+              <div class="checkbox-row black-time-roster-row">
+                <input type="checkbox" id="black-time-roster-${rowIdx}" data-name="${escapeHtml(name)}"
+                  ${selectedBlackTimeTutors.has(name) ? 'checked' : ''} />
+                <label for="black-time-roster-${rowIdx}">${escapeHtml(name)}</label>
+                <button type="button" class="btn btn-ghost black-time-roster-remove-btn" data-name="${escapeHtml(name)}">삭제</button>
+              </div>
+            `;
+          })
+          .join('');
         return `
-          <div class="checkbox-row black-time-roster-row">
-            <input type="checkbox" id="black-time-roster-${idx}" data-name="${escapeHtml(name)}"
-              ${selectedBlackTimeTutors.has(name) ? 'checked' : ''} />
-            <label for="black-time-roster-${idx}">${escapeHtml(name)}</label>
-            <span class="tutor-center-badge">${escapeHtml(center)}</span>
-            <button type="button" class="btn btn-ghost black-time-roster-remove-btn" data-name="${escapeHtml(name)}">삭제</button>
+          <div class="black-time-roster-center-group">
+            <div class="black-time-roster-center-header">${escapeHtml(center)} (${names.length}명)</div>
+            ${rows}
           </div>
         `;
       })
@@ -544,6 +615,11 @@ function renderMorningSpecialStatsView(container) {
 
   blackTimeRosterCenterFilterEl.addEventListener('change', () => {
     blackTimeRosterCenterFilter = blackTimeRosterCenterFilterEl.value;
+    renderBlackTimeRoster();
+  });
+
+  blackTimeRosterSearchEl.addEventListener('input', () => {
+    blackTimeRosterSearchQuery = blackTimeRosterSearchEl.value.trim().toLowerCase();
     renderBlackTimeRoster();
   });
 
@@ -627,7 +703,7 @@ function renderMorningSpecialStatsView(container) {
 
   // 이 화면의 테스트 버튼들과 오전특강 통계 작업은 python worker 프로세스를 하나만 쓰므로
   // 동시에 실행할 수 없다. 지금 실행 중인 작업이 어느 쪽인지 추적해서 완료 시 해당 UI만 되돌린다.
-  let activeJob = null; // 'login_test' | 'tutor_search_test' | 'tutor_schedule_set' | 'tutor_roster_fetch' | 'morning_special_stats' | null
+  let activeJob = null; // 'login_test' | 'tutor_search_test' | 'tutor_schedule_set' | 'tutor_roster_fetch' | 'schedule_text_apply' | 'morning_special_stats' | null
   let paused = false;
 
   function setStartButtonsDisabled(disabled) {
@@ -636,6 +712,7 @@ function renderMorningSpecialStatsView(container) {
     tutorSearchTestBtn.disabled = disabled;
     tutorTimeTestBtn.disabled = disabled;
     tutorRosterFetchBtn.disabled = disabled;
+    scheduleTextApplyBtn.disabled = disabled;
   }
 
   function setTutorRosterFetchStatus(label, statusClass) {
@@ -807,6 +884,173 @@ function renderMorningSpecialStatsView(container) {
     tutorTimeTestStopBtn.disabled = true;
   });
 
+  // 텍스트로 블랙/화이트 타임 일괄 설정: Claude API로 자유 형식 텍스트를 분석해
+  // (강사, 요일, 시간, 상태) 목록으로 뽑아낸 뒤, 바로 실행하지 않고 미리보기에서
+  // 사용자가 체크해서 고른 항목만 tutor_schedule_set 작업(entries 방식)으로 보낸다.
+  let parsedScheduleEntries = [];
+
+  function weekdayLabelsFor(weekdays) {
+    return weekdays.map((w) => WEEKDAY_LABELS[w]).join('/');
+  }
+
+  function setScheduleTextParseStatus(label, statusClass) {
+    scheduleTextParseStatus.textContent = label;
+    scheduleTextParseStatus.className = `status-badge status-${statusClass}`;
+  }
+
+  function setScheduleTextApplyStatus(label, statusClass) {
+    scheduleTextApplyStatus.textContent = label;
+    scheduleTextApplyStatus.className = `status-badge status-${statusClass}`;
+  }
+
+  function renderSchedulePreview() {
+    if (parsedScheduleEntries.length === 0) {
+      scheduleTextPreviewBody.innerHTML = '<tr><td colspan="5" class="empty">아직 분석한 내역이 없습니다.</td></tr>';
+      scheduleTextApplyBtn.disabled = true;
+      scheduleTextPreviewSelectAll.checked = false;
+      return;
+    }
+
+    scheduleTextPreviewBody.innerHTML = parsedScheduleEntries
+      .map((entry) => {
+        const timeLabel = `${String(entry.hour).padStart(2, '0')}:${String(entry.startMinute).padStart(2, '0')}`;
+        const stateLabel = entry.state === 'open' ? '열기(화이트)' : '닫기(블랙+그레이)';
+        const unmatchedNote = entry.matched ? '' : ' <span class="field-hint">(강사 명단에 없음)</span>';
+        return `
+          <tr>
+            <td><input type="checkbox" class="schedule-text-preview-chk" data-id="${entry.id}" ${entry.included ? 'checked' : ''} /></td>
+            <td>${escapeHtml(entry.tutor)}${unmatchedNote}</td>
+            <td>${escapeHtml(weekdayLabelsFor(entry.weekdays))}</td>
+            <td>${escapeHtml(timeLabel)}</td>
+            <td>${escapeHtml(stateLabel)}</td>
+          </tr>
+        `;
+      })
+      .join('');
+
+    scheduleTextApplyBtn.disabled = !parsedScheduleEntries.some((entry) => entry.included);
+    scheduleTextPreviewSelectAll.checked = parsedScheduleEntries.every((entry) => entry.included);
+  }
+
+  scheduleTextPreviewBody.addEventListener('change', (e) => {
+    if (!e.target.matches('.schedule-text-preview-chk')) return;
+    const id = e.target.dataset.id;
+    const entry = parsedScheduleEntries.find((it) => String(it.id) === id);
+    if (entry) entry.included = e.target.checked;
+    scheduleTextApplyBtn.disabled = !parsedScheduleEntries.some((it) => it.included);
+    scheduleTextPreviewSelectAll.checked = parsedScheduleEntries.every((it) => it.included);
+  });
+
+  scheduleTextPreviewSelectAll.addEventListener('change', () => {
+    const checked = scheduleTextPreviewSelectAll.checked;
+    parsedScheduleEntries.forEach((entry) => {
+      entry.included = checked;
+    });
+    renderSchedulePreview();
+  });
+
+  scheduleTextParseBtn.addEventListener('click', async () => {
+    const text = scheduleTextInput.value.trim();
+    if (!text) {
+      alert('분석할 텍스트를 입력해주세요.');
+      return;
+    }
+
+    scheduleTextParseBtn.disabled = true;
+    setScheduleTextParseStatus('분석 중', 'processing');
+    scheduleTextWarningsEl.innerHTML = '';
+
+    const result = await window.api.parseTutorScheduleText(text, blackTimeTutorRoster);
+
+    scheduleTextParseBtn.disabled = false;
+
+    if (!result.success) {
+      setScheduleTextParseStatus('실패', 'failed');
+      alert(result.error || '분석에 실패했습니다.');
+      return;
+    }
+
+    const knownLower = new Set(blackTimeTutorRoster.map((n) => n.toLowerCase()));
+    parsedScheduleEntries = (result.entries || [])
+      .map((raw, idx) => {
+        const tutor = String(raw.tutor || '').trim();
+        const weekdays = Array.isArray(raw.weekdays)
+          ? raw.weekdays.map(Number).filter((w) => Number.isInteger(w) && w >= 0 && w <= 6)
+          : [];
+        const hour = Number(raw.hour);
+        let startMinute = Number(raw.startMinute);
+        if (![0, 30].includes(startMinute)) startMinute = startMinute >= 15 ? 30 : 0;
+        const state = raw.state === 'open' ? 'open' : 'close';
+
+        return {
+          id: idx,
+          tutor,
+          weekdays,
+          hour,
+          startMinute,
+          state,
+          matched: knownLower.has(tutor.toLowerCase()),
+          included: Boolean(tutor) && weekdays.length > 0 && Number.isInteger(hour),
+        };
+      })
+      .filter((entry) => entry.tutor);
+
+    setScheduleTextParseStatus(`완료 (${parsedScheduleEntries.length}건)`, 'success');
+
+    const unmatchedCount = parsedScheduleEntries.filter((entry) => !entry.matched).length;
+    const warnings = [...(result.warnings || [])];
+    if (unmatchedCount > 0) {
+      warnings.push(`강사 명단에서 못 찾은 이름이 ${unmatchedCount}건 있습니다. 실행 전에 이름을 확인해주세요.`);
+    }
+    scheduleTextWarningsEl.innerHTML = warnings.length > 0
+      ? warnings.map((w) => `⚠ ${escapeHtml(w)}`).join('<br>')
+      : '';
+
+    renderSchedulePreview();
+  });
+
+  scheduleTextApplyBtn.addEventListener('click', async () => {
+    const includedEntries = parsedScheduleEntries.filter((entry) => entry.included);
+    if (includedEntries.length === 0) {
+      alert('실행할 항목을 하나 이상 선택해주세요.');
+      return;
+    }
+
+    const tutorCount = new Set(includedEntries.map((entry) => entry.tutor)).size;
+    const confirmed = confirm(
+      `강사 ${tutorCount}명, 총 ${includedEntries.length}건을 실제로 제출합니다. 계속할까요?`
+    );
+    if (!confirmed) return;
+
+    const result = await window.api.startJob({
+      jobId: 'tutor_schedule_set',
+      entries: includedEntries.map((entry) => ({
+        tutorName: entry.tutor,
+        weekdays: entry.weekdays,
+        hour: entry.hour,
+        startMinute: entry.startMinute,
+        state: entry.state,
+      })),
+    });
+    if (!result.started) {
+      alert('이미 실행 중인 작업이 있습니다. 사이드바 하단 \'실행 중인 작업\'에서 종료할 수 있습니다.');
+      return;
+    }
+
+    tutorScheduleResults = [];
+    renderTutorScheduleResults();
+
+    activeJob = 'schedule_text_apply';
+    setScheduleTextApplyStatus('진행 중', 'processing');
+    setStartButtonsDisabled(true);
+    scheduleTextApplyStopBtn.disabled = false;
+  });
+
+  scheduleTextApplyStopBtn.addEventListener('click', async () => {
+    await window.api.stopJob();
+    scheduleTextApplyStopBtn.disabled = true;
+  });
+
   startBtn.addEventListener('click', async () => {
     const checkedNames = getCheckedTutorNames();
     const extraNames = tutorListEl.value
@@ -935,6 +1179,12 @@ function renderMorningSpecialStatsView(container) {
       );
       tutorRosterFetchStopBtn.disabled = true;
       lastFetchedTutorAddedCount = 0;
+    } else if (activeJob === 'schedule_text_apply') {
+      setScheduleTextApplyStatus(
+        data.code === 0 ? '완료 (브라우저 창 확인)' : '실패 (로그 확인)',
+        data.code === 0 ? 'success' : 'failed'
+      );
+      scheduleTextApplyStopBtn.disabled = true;
     } else if (activeJob === 'morning_special_stats') {
       pauseBtn.disabled = true;
       stopBtn.disabled = true;
@@ -942,6 +1192,9 @@ function renderMorningSpecialStatsView(container) {
     }
 
     setStartButtonsDisabled(false);
+    // scheduleTextApplyBtn은 일반 버튼과 달리 "선택된 항목이 있을 때만" 활성화돼야
+    // 하므로, 위에서 일괄로 풀어준 뒤 실제 선택 상태에 맞춰 다시 계산한다.
+    renderSchedulePreview();
     activeJob = null;
   });
 }
