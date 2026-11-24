@@ -478,6 +478,15 @@ textarea {
   flex: 1;
 }
 
+.tutor-center-badge {
+  font-size: 11px;
+  color: var(--text-muted, #888);
+  background: var(--panel-alt, rgba(128, 128, 128, 0.15));
+  border-radius: 4px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
 .file-input-row {
   display: flex;
   align-items: center;

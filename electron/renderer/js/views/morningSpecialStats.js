@@ -54,12 +54,15 @@ function renderMorningSpecialStatsView(container) {
         <button id="tutor-roster-fetch-stop-btn" class="btn btn-danger" disabled>중단</button>
         <span id="tutor-roster-fetch-status" class="status-badge status-pending">대기중</span>
       </div>
-      <div class="field-hint">로그인 → 시간표관리 → 원어민 강사 시간표 페이지에서 현재 등록된 강사 전체 명단을 자동으로 읽어와 아래 명단에 합쳐줍니다. (이미 있는 이름은 그대로 두고, 새로 생긴 강사만 추가됩니다.)</div>
+      <div class="field-hint">로그인 → 시간표관리 → 원어민 강사 시간표 페이지에서 현재 등록된 강사 전체 명단을 센터별로 분류해서 읽어와 아래 명단에 합쳐줍니다. (이미 있는 이름은 그대로 두고, 새로 생긴 강사만 추가됩니다. 센터 분류는 매번 최신 정보로 갱신됩니다.)</div>
       <div class="tutor-roster-actions">
         <input type="text" id="black-time-roster-input" placeholder="강사 이름 추가 (예: Daheetest)" />
         <button id="black-time-roster-add-btn" type="button" class="btn btn-ghost">추가</button>
         <button id="black-time-roster-select-all-btn" type="button" class="btn btn-ghost">전체 선택</button>
         <button id="black-time-roster-deselect-all-btn" type="button" class="btn btn-ghost">전체 해제</button>
+        <select id="black-time-roster-center-filter">
+          <option value="">센터 전체 보기</option>
+        </select>
       </div>
       <div id="black-time-roster-list" class="black-time-roster-list"></div>
 
@@ -287,6 +290,7 @@ function renderMorningSpecialStatsView(container) {
   const blackTimeRosterInput = document.getElementById('black-time-roster-input');
   const blackTimeRosterAddBtn = document.getElementById('black-time-roster-add-btn');
   const blackTimeRosterListEl = document.getElementById('black-time-roster-list');
+  const blackTimeRosterCenterFilterEl = document.getElementById('black-time-roster-center-filter');
 
   const tutorTimeTestStateEl = document.getElementById('tutor-time-test-state');
   const tutorWeekdaySelectAllBtn = document.getElementById('tutor-weekday-select-all-btn');
@@ -477,24 +481,71 @@ function renderMorningSpecialStatsView(container) {
       .join('');
   }
 
+  const UNKNOWN_CENTER = '미분류';
+
   let blackTimeTutorRoster = [];
   let selectedBlackTimeTutors = new Set();
+  // "전체 강사 조회"로 긁어온 센터 분류: 강사명 -> 센터명. 수동으로 추가한 강사는
+  // 센터를 알 수 없으므로 이 맵에 없으면 '미분류'로 표시한다.
+  let tutorCenterMap = {};
+  let blackTimeRosterCenterFilter = '';
+
+  function persistTutorCenterMap() {
+    window.api.setSettings({ tutorCenterMap });
+  }
+
+  function renderBlackTimeRosterCenterFilterOptions() {
+    const centers = Array.from(
+      new Set(blackTimeTutorRoster.map((name) => tutorCenterMap[name] || UNKNOWN_CENTER))
+    ).sort((a, b) => a.localeCompare(b));
+
+    const optionsHtml = ['<option value="">센터 전체 보기</option>']
+      .concat(centers.map((center) => `<option value="${escapeHtml(center)}">${escapeHtml(center)}</option>`))
+      .join('');
+
+    blackTimeRosterCenterFilterEl.innerHTML = optionsHtml;
+    // 더 이상 존재하지 않는 센터가 선택돼 있었다면(강사가 다 지워진 경우) 전체 보기로 되돌린다.
+    if (!centers.includes(blackTimeRosterCenterFilter)) {
+      blackTimeRosterCenterFilter = '';
+    }
+    blackTimeRosterCenterFilterEl.value = blackTimeRosterCenterFilter;
+  }
 
   function renderBlackTimeRoster() {
-    const sorted = [...blackTimeTutorRoster].sort((a, b) => a.localeCompare(b));
+    renderBlackTimeRosterCenterFilterOptions();
+
+    const sorted = [...blackTimeTutorRoster]
+      .filter((name) => {
+        if (!blackTimeRosterCenterFilter) return true;
+        return (tutorCenterMap[name] || UNKNOWN_CENTER) === blackTimeRosterCenterFilter;
+      })
+      .sort((a, b) => a.localeCompare(b));
+
+    if (sorted.length === 0) {
+      blackTimeRosterListEl.innerHTML = '<div class="field-hint">표시할 강사가 없습니다.</div>';
+      return;
+    }
+
     blackTimeRosterListEl.innerHTML = sorted
-      .map(
-        (name, idx) => `
+      .map((name, idx) => {
+        const center = tutorCenterMap[name] || UNKNOWN_CENTER;
+        return `
           <div class="checkbox-row black-time-roster-row">
             <input type="checkbox" id="black-time-roster-${idx}" data-name="${escapeHtml(name)}"
               ${selectedBlackTimeTutors.has(name) ? 'checked' : ''} />
             <label for="black-time-roster-${idx}">${escapeHtml(name)}</label>
+            <span class="tutor-center-badge">${escapeHtml(center)}</span>
             <button type="button" class="btn btn-ghost black-time-roster-remove-btn" data-name="${escapeHtml(name)}">삭제</button>
           </div>
-        `
-      )
+        `;
+      })
       .join('');
   }
+
+  blackTimeRosterCenterFilterEl.addEventListener('change', () => {
+    blackTimeRosterCenterFilter = blackTimeRosterCenterFilterEl.value;
+    renderBlackTimeRoster();
+  });
 
   function persistBlackTimeTutorRoster() {
     window.api.setSettings({ blackTimeTutorRoster });
@@ -526,7 +577,9 @@ function renderMorningSpecialStatsView(container) {
     const name = removeBtn.dataset.name;
     blackTimeTutorRoster = blackTimeTutorRoster.filter((existing) => existing !== name);
     selectedBlackTimeTutors.delete(name);
+    delete tutorCenterMap[name];
     persistBlackTimeTutorRoster();
+    persistTutorCenterMap();
     renderBlackTimeRoster();
   });
 
@@ -538,13 +591,21 @@ function renderMorningSpecialStatsView(container) {
     }
   });
 
+  // 센터 필터가 걸려 있으면 "전체 선택/해제"도 지금 보이는(필터된) 강사만 대상으로 한다.
+  function getFilteredBlackTimeTutorNames() {
+    if (!blackTimeRosterCenterFilter) return [...blackTimeTutorRoster];
+    return blackTimeTutorRoster.filter(
+      (name) => (tutorCenterMap[name] || UNKNOWN_CENTER) === blackTimeRosterCenterFilter
+    );
+  }
+
   blackTimeRosterSelectAllBtn.addEventListener('click', () => {
-    blackTimeTutorRoster.forEach((name) => selectedBlackTimeTutors.add(name));
+    getFilteredBlackTimeTutorNames().forEach((name) => selectedBlackTimeTutors.add(name));
     renderBlackTimeRoster();
   });
 
   blackTimeRosterDeselectAllBtn.addEventListener('click', () => {
-    selectedBlackTimeTutors.clear();
+    getFilteredBlackTimeTutorNames().forEach((name) => selectedBlackTimeTutors.delete(name));
     renderBlackTimeRoster();
   });
 
@@ -560,6 +621,7 @@ function renderMorningSpecialStatsView(container) {
     updateTutorRosterCount();
 
     blackTimeTutorRoster = settings.blackTimeTutorRoster || [];
+    tutorCenterMap = settings.tutorCenterMap || {};
     renderBlackTimeRoster();
   });
 
@@ -596,21 +658,29 @@ function renderMorningSpecialStatsView(container) {
     tutorTimeTestStatus.className = `status-badge status-${statusClass}`;
   }
 
-  // python worker가 크롤링해서 보내준 전체 강사 이름 목록을 블랙/화이트 타임 설정
-  // 명단(blackTimeTutorRoster)에 합친다. 이미 있는 이름(대소문자 무시)은 건드리지
-  // 않고, 사용자가 직접 추가한 이름이나 기존 체크 상태를 그대로 유지한다.
-  function mergeFetchedTutorNames(names) {
-    const existingLower = new Set(blackTimeTutorRoster.map((name) => name.toLowerCase()));
+  // python worker가 센터별로 분류해서 보내준 전체 강사 목록([{name, center}, ...])을
+  // 블랙/화이트 타임 설정 명단(blackTimeTutorRoster)에 합친다. 이미 있는 이름(대소문자
+  // 무시)은 명단에 다시 추가하지 않고 기존 체크 상태를 그대로 유지하지만, 센터 분류는
+  // 매번 최신 정보로 덮어써서(강사가 팀을 옮긴 경우 등) 항상 지금 화면 기준과 같게 맞춘다.
+  function mergeFetchedTutorRoster(entries) {
+    const existingLower = new Map(blackTimeTutorRoster.map((name) => [name.toLowerCase(), name]));
     let addedCount = 0;
 
-    names.forEach((name) => {
-      if (existingLower.has(name.toLowerCase())) return;
-      existingLower.add(name.toLowerCase());
+    entries.forEach(({ name, center }) => {
+      const lower = name.toLowerCase();
+      const existingName = existingLower.get(lower);
+      if (existingName) {
+        tutorCenterMap[existingName] = center;
+        return;
+      }
+      existingLower.set(lower, name);
       blackTimeTutorRoster.push(name);
+      tutorCenterMap[name] = center;
       addedCount += 1;
     });
 
     persistBlackTimeTutorRoster();
+    persistTutorCenterMap();
     renderBlackTimeRoster();
     return addedCount;
   }
@@ -822,7 +892,7 @@ function renderMorningSpecialStatsView(container) {
       return;
     }
     if (data.kind === 'tutor_roster' && data.tutorRoster) {
-      lastFetchedTutorAddedCount = mergeFetchedTutorNames(data.tutorRoster.names || []);
+      lastFetchedTutorAddedCount = mergeFetchedTutorRoster(data.tutorRoster.entries || []);
       return;
     }
     collectedRecords.push({ tutor: data.tutor, member: data.member, creditCount: data.credit_count });
