@@ -84,5 +84,11 @@ def emit_book_invoice_record(book_invoice: dict) -> None:
     emit({"type": "record", "kind": "book_invoice", "bookInvoice": book_invoice})
 
 
+def emit_tutor_roster_record(names: list[str]) -> None:
+    """"전체 강사 조회"로 원어민 강사 시간표 페이지에서 실제로 긁어온 전체
+    강사 이름 목록을 한 번에 화면에 반영할 수 있도록 보낸다."""
+    emit({"type": "record", "kind": "tutor_roster", "tutorRoster": {"names": names}})
+
+
 def emit_done(summary: dict) -> None:
     emit({"type": "done", "summary": summary})

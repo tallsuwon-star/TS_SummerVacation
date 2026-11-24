@@ -49,6 +49,12 @@ function renderMorningSpecialStatsView(container) {
 
     <section class="panel">
       <div class="field-label login-test-label">강사 블랙/그레이/화이트 타임 설정 (로그인 → 시간표관리 → 검색 → SCH → 체크박스 설정 → 작성완료 제출까지 자동)</div>
+      <div class="inline-row">
+        <button id="tutor-roster-fetch-btn" class="btn btn-primary">전체 강사 조회</button>
+        <button id="tutor-roster-fetch-stop-btn" class="btn btn-danger" disabled>중단</button>
+        <span id="tutor-roster-fetch-status" class="status-badge status-pending">대기중</span>
+      </div>
+      <div class="field-hint">로그인 → 시간표관리 → 원어민 강사 시간표 페이지에서 현재 등록된 강사 전체 명단을 자동으로 읽어와 아래 명단에 합쳐줍니다. (이미 있는 이름은 그대로 두고, 새로 생긴 강사만 추가됩니다.)</div>
       <div class="tutor-roster-actions">
         <input type="text" id="black-time-roster-input" placeholder="강사 이름 추가 (예: Daheetest)" />
         <button id="black-time-roster-add-btn" type="button" class="btn btn-ghost">추가</button>
@@ -273,6 +279,10 @@ function renderMorningSpecialStatsView(container) {
   const tutorSearchTestBtn = document.getElementById('tutor-search-test-btn');
   const tutorSearchTestStopBtn = document.getElementById('tutor-search-test-stop-btn');
   const tutorSearchTestStatus = document.getElementById('tutor-search-test-status');
+
+  const tutorRosterFetchBtn = document.getElementById('tutor-roster-fetch-btn');
+  const tutorRosterFetchStopBtn = document.getElementById('tutor-roster-fetch-stop-btn');
+  const tutorRosterFetchStatus = document.getElementById('tutor-roster-fetch-status');
 
   const blackTimeRosterInput = document.getElementById('black-time-roster-input');
   const blackTimeRosterAddBtn = document.getElementById('black-time-roster-add-btn');
@@ -555,7 +565,7 @@ function renderMorningSpecialStatsView(container) {
 
   // 이 화면의 테스트 버튼들과 오전특강 통계 작업은 python worker 프로세스를 하나만 쓰므로
   // 동시에 실행할 수 없다. 지금 실행 중인 작업이 어느 쪽인지 추적해서 완료 시 해당 UI만 되돌린다.
-  let activeJob = null; // 'login_test' | 'tutor_search_test' | 'tutor_schedule_set' | 'morning_special_stats' | null
+  let activeJob = null; // 'login_test' | 'tutor_search_test' | 'tutor_schedule_set' | 'tutor_roster_fetch' | 'morning_special_stats' | null
   let paused = false;
 
   function setStartButtonsDisabled(disabled) {
@@ -563,6 +573,12 @@ function renderMorningSpecialStatsView(container) {
     loginTestBtn.disabled = disabled;
     tutorSearchTestBtn.disabled = disabled;
     tutorTimeTestBtn.disabled = disabled;
+    tutorRosterFetchBtn.disabled = disabled;
+  }
+
+  function setTutorRosterFetchStatus(label, statusClass) {
+    tutorRosterFetchStatus.textContent = label;
+    tutorRosterFetchStatus.className = `status-badge status-${statusClass}`;
   }
 
   function setLoginTestStatus(label, statusClass) {
@@ -579,6 +595,43 @@ function renderMorningSpecialStatsView(container) {
     tutorTimeTestStatus.textContent = label;
     tutorTimeTestStatus.className = `status-badge status-${statusClass}`;
   }
+
+  // python worker가 크롤링해서 보내준 전체 강사 이름 목록을 블랙/화이트 타임 설정
+  // 명단(blackTimeTutorRoster)에 합친다. 이미 있는 이름(대소문자 무시)은 건드리지
+  // 않고, 사용자가 직접 추가한 이름이나 기존 체크 상태를 그대로 유지한다.
+  function mergeFetchedTutorNames(names) {
+    const existingLower = new Set(blackTimeTutorRoster.map((name) => name.toLowerCase()));
+    let addedCount = 0;
+
+    names.forEach((name) => {
+      if (existingLower.has(name.toLowerCase())) return;
+      existingLower.add(name.toLowerCase());
+      blackTimeTutorRoster.push(name);
+      addedCount += 1;
+    });
+
+    persistBlackTimeTutorRoster();
+    renderBlackTimeRoster();
+    return addedCount;
+  }
+
+  tutorRosterFetchBtn.addEventListener('click', async () => {
+    const result = await window.api.startJob({ jobId: 'tutor_roster_fetch' });
+    if (!result.started) {
+      alert('이미 실행 중인 작업이 있습니다. 사이드바 하단 \'실행 중인 작업\'에서 종료할 수 있습니다.');
+      return;
+    }
+
+    activeJob = 'tutor_roster_fetch';
+    setTutorRosterFetchStatus('조회 중', 'processing');
+    setStartButtonsDisabled(true);
+    tutorRosterFetchStopBtn.disabled = false;
+  });
+
+  tutorRosterFetchStopBtn.addEventListener('click', async () => {
+    await window.api.stopJob();
+    tutorRosterFetchStopBtn.disabled = true;
+  });
 
   loginTestBtn.addEventListener('click', async () => {
     const result = await window.api.startJob({ jobId: 'login_test' });
@@ -760,10 +813,16 @@ function renderMorningSpecialStatsView(container) {
     dashboard.setStatus(data.tutor, data.status, data.found, data.reason);
   });
 
+  let lastFetchedTutorAddedCount = 0;
+
   window.api.onJobRecord((data) => {
     if (data.kind === 'tutor_schedule' && data.tutorSchedule) {
       tutorScheduleResults.push(data.tutorSchedule);
       renderTutorScheduleResults();
+      return;
+    }
+    if (data.kind === 'tutor_roster' && data.tutorRoster) {
+      lastFetchedTutorAddedCount = mergeFetchedTutorNames(data.tutorRoster.names || []);
       return;
     }
     collectedRecords.push({ tutor: data.tutor, member: data.member, creditCount: data.credit_count });
@@ -799,6 +858,13 @@ function renderMorningSpecialStatsView(container) {
         data.code === 0 ? 'success' : 'failed'
       );
       tutorTimeTestStopBtn.disabled = true;
+    } else if (activeJob === 'tutor_roster_fetch') {
+      setTutorRosterFetchStatus(
+        data.code === 0 ? `완료 (신규 ${lastFetchedTutorAddedCount}명 추가)` : '실패 (로그 확인)',
+        data.code === 0 ? 'success' : 'failed'
+      );
+      tutorRosterFetchStopBtn.disabled = true;
+      lastFetchedTutorAddedCount = 0;
     } else if (activeJob === 'morning_special_stats') {
       pauseBtn.disabled = true;
       stopBtn.disabled = true;
