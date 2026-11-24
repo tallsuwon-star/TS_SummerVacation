@@ -1,7 +1,8 @@
 // 신규 작업(job) 추가 시 여기에 항목을 등록하고,
 // electron/renderer/js/views/ 에 뷰 파일을, app.js의 VIEW_RENDERERS에 렌더 함수를 등록한다.
 const ALL_JOBS = [
-  { id: 'morning_special_stats', label: '오전특강 통계' },
+  { id: 'morning_special_stats', label: '보강권 지급 자동화' },
+  { id: 'tutor_schedule_manager', label: '강사 스케줄/블랙타임 관리' },
   { id: 'overdue_report', label: '미납자 관리' },
   { id: 'vocaking_report', label: '보카킹 보고' },
   { id: 'naver_store_report', label: '네이버 스토어' },
